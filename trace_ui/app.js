@@ -1,6 +1,8 @@
 const timeline = document.querySelector('#timeline');
 const selector = document.querySelector('#traces');
 const status = document.querySelector('#status');
+const staticMode = window.TRACE_STATIC === true;
+let staticEvents = null;
 let cursor = 0, generation = 0, busy = false, tools = new Map(), assistant = null, terminal = '';
 const pretty = value => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 function node(tag, text, parent) {
@@ -89,16 +91,16 @@ function render(e) {
   }
 }
 async function loadList() {
-  const response = await fetch('/api/traces'); if (!response.ok) throw Error('Cannot list traces');
+  const response = await fetch(staticMode ? './data/traces.json' : '/api/traces'); if (!response.ok) throw Error('Cannot list traces');
   const traces = await response.json(); const current = selector.value;
   selector.replaceChildren(node('option', traces.length ? 'Select a trace' : 'No traces yet'));
   selector.options[0].value = '';
-  for (const trace of traces) {const option = node('option', trace.id, selector); option.value = trace.id;}
+  for (const trace of traces) {const option = node('option', trace.label || trace.id, selector); option.value = trace.id;}
   selector.value = current;
   if (!selector.value && traces.length) {selector.value = traces[0].id; selectTrace();}
 }
 function selectTrace() {
-  generation++; busy = false; cursor = 0; tools = new Map(); assistant = null; terminal = '';
+  generation++; staticEvents = null; busy = false; cursor = 0; tools = new Map(); assistant = null; terminal = '';
   timeline.replaceChildren(); poll(true);
 }
 async function poll(force = false) {
@@ -107,14 +109,26 @@ async function poll(force = false) {
   try {
     let more;
     do {
-      const response = await fetch(`/api/events?trace=${encodeURIComponent(selector.value)}&cursor=${cursor}`);
-      const payload = await response.json(); if (!response.ok) throw Error(payload.error);
+      let payload;
+      if (staticMode) {
+        if (!staticEvents) {
+          const response = await fetch(`./data/${encodeURIComponent(selector.value)}`);
+          if (!response.ok) throw Error('Cannot load published trace');
+          const events = await response.json();
+          if (version !== generation) return;
+          staticEvents = events;
+        }
+        payload = {events: staticEvents.slice(cursor), cursor: staticEvents.length, more: false};
+      } else {
+        const response = await fetch(`/api/events?trace=${encodeURIComponent(selector.value)}&cursor=${cursor}`);
+        payload = await response.json(); if (!response.ok) throw Error(payload.error);
+      }
       if (version !== generation) return;
       if (payload.reset) {timeline.replaceChildren(); tools.clear(); assistant = null; terminal = '';}
       for (const event of payload.events) render(event);
       cursor = payload.cursor; more = payload.more;
     } while (more && version === generation);
-    status.textContent = `${terminal || 'Following · no end event yet'} · ${(cursor / 1024).toFixed(0)} KB read`;
+    status.textContent = staticMode ? `Published snapshot · ${terminal || 'no end event'} · ${cursor} events` : `${terminal || 'Following · no end event yet'} · ${(cursor / 1024).toFixed(0)} KB read`;
     if (document.querySelector('#scroll').checked) window.scrollTo(0, document.body.scrollHeight);
   } catch (error) {if (version === generation) status.textContent = error.message;}
   finally {if (version === generation) busy = false;}
@@ -122,5 +136,8 @@ async function poll(force = false) {
 selector.addEventListener('change', selectTrace);
 document.querySelector('#refresh').addEventListener('click', () => loadList().catch(error => status.textContent = error.message));
 document.querySelector('#follow').addEventListener('change', () => poll());
-setInterval(poll, 1500);
+if (staticMode) {
+  document.querySelector('#follow').checked = false;
+  document.querySelector('#follow').disabled = true;
+} else setInterval(poll, 1500);
 loadList().catch(error => status.textContent = error.message);
