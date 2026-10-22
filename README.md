@@ -3,7 +3,7 @@
 Run from the repository root:
 
 ```sh
-python3 new-codebase/build_paper_database.py --dataset data_5000
+python3 build_paper_database.py --dataset ../data_5000
 ```
 
 Each nonblank dataset record is expected to be one JSON line. The 1-based line
@@ -28,7 +28,7 @@ has no dependency on the old codebase.
 After building the database:
 
 ```sh
-python3 new-codebase/fetch_pubmed_pdfs.py --limit 3
+python3 fetch_pubmed_pdfs.py --limit 3
 ```
 
 Omit `--limit` to attempt the entire database. Add `--email` to identify your
@@ -52,3 +52,21 @@ Official interfaces:
 - https://pmc.ncbi.nlm.nih.gov/tools/id-converter-api/
 - https://pmc.ncbi.nlm.nih.gov/tools/pmcaws/
 - https://pmc-oa-opendata.s3.amazonaws.com/README.txt
+
+
+## Review and signal experiments
+
+Run commands from this v2 repository root. The two experiment stages are:
+
+- `review_pipeline/`: compare local paper PDFs with human reviews using the pi
+  agent and web search; save free-form `response.txt` per paper. See
+  [review pipeline instructions](review_pipeline/README.md).
+- `signal_extraction_pipeline/`: extract exact claim quotes from audit responses,
+  embed and cluster them with cosine similarity under a tokenizer-checked context
+  budget, optionally label clusters, and export the signal domain and response
+  presence matrix. See [signal pipeline instructions](signal_extraction_pipeline/README.md).
+
+All LLM prompts live in `prompts/`. Compute configuration files belong in
+`quest_computes/`. Generated paper data and experiment result directories are
+excluded from version control. Signal extraction requires served chat, matching
+chat tokenizer, and embedding endpoints; it does not launch GPU services.
