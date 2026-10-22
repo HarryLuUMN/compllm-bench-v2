@@ -1,4 +1,4 @@
-# Paper database
+# Human-AI Complementarity Benchmark
 
 Run from the repository root:
 
