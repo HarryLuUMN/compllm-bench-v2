@@ -4,3 +4,6 @@ __pycache__/
 review_pipeline/results/
 
 signal_extraction_pipeline/results/
+
+statistical_modeling_pipeline/results/
+quest_computes/.venv/

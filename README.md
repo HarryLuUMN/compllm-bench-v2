@@ -70,3 +70,16 @@ All LLM prompts live in `prompts/`. Compute configuration files belong in
 `quest_computes/`. Generated paper data and experiment result directories are
 excluded from version control. Signal extraction requires served chat, matching
 chat tokenizer, and embedding endpoints; it does not launch GPU services.
+
+## Statistical modeling
+
+`statistical_modeling_pipeline/` consumes completed signal extraction outputs,
+joins paper-level citation metadata, and runs the original four fixed-signal
+logistic models. The audit signal block feeds Model 4 directly; Models 1–3
+additionally require paper/human signals and, for Model 1, LLM citation predictions.
+Missing inputs are reported explicitly. See
+[statistical modeling instructions](statistical_modeling_pipeline/README.md) for
+input formats, model definitions, outputs and statistical interpretation limits.
+Compute settings and the reused legacy numerical environment specification live
+in `quest_computes/statistical_modeling.yaml` and
+`quest_computes/statistical_modeling_requirements.txt`.

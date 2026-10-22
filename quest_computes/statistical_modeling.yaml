@@ -1,0 +1,5 @@
+cv_splits: 3
+random_state: 42
+regularization_c: 1.0
+normalization_min_cell_size: 5
+plot: true
