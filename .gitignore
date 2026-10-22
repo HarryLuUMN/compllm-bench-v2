@@ -7,3 +7,6 @@ signal_extraction_pipeline/results/
 
 statistical_modeling_pipeline/results/
 quest_computes/.venv/
+
+.env
+quest_computes/pi_runtime/

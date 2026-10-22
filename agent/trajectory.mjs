@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, openSync, closeSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
 
-const secrets = /^(authorization|proxy-authorization|api[-_]?key|x-api-key|access[-_]?token|refresh[-_]?token|password|cookie|set-cookie)$/i;
+const secrets = /^(authorization|proxy-authorization|api[-_]?key|x-api-key|x-subscription-token|access[-_]?token|refresh[-_]?token|password|cookie|set-cookie)$/i;
 
 export class Trajectory {
   constructor({ root, file, folder, metadata }) {

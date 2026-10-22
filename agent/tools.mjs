@@ -18,7 +18,7 @@ export async function python(args, signal) {
   return JSON.parse(stdout);
 }
 
-export async function createTools(folder, { fetchImpl = fetch, apiKey = process.env.YDC_API_KEY } = {}) {
+export async function createTools(folder, { fetchImpl = fetch, apiKey = process.env.YDC_API_KEY || process.env.YOU_COM_API_KEY, braveApiKey = process.env.BRAVE_SEARCH_API_KEY } = {}) {
   const root = await realpath(folder);
   return [
     {
@@ -56,20 +56,23 @@ export async function createTools(folder, { fetchImpl = fetch, apiKey = process.
       },
     },
     {
-      name: 'web_search', label: 'Search the web', description: 'Search You.com for external evidence; returns URLs, descriptions and snippets.',
+      name: 'web_search', label: 'Search the web', description: 'Search the web for external evidence; returns URLs, descriptions and snippets.',
       parameters: object({ query: { ...string, maxLength: 500 } }, ['query']),
       async execute(_id, { query }, signal) {
-        if (!apiKey) throw new Error('Set YDC_API_KEY to enable web_search');
-        const response = await fetchImpl('https://ydc-index.io/v1/search', {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-          body: JSON.stringify({ query, count: 5 }),
+        if (!apiKey && !braveApiKey) throw new Error('Set YDC_API_KEY or BRAVE_SEARCH_API_KEY to enable web_search');
+        const url = apiKey ? 'https://ydc-index.io/v1/search'
+          : 'https://api.search.brave.com/res/v1/web/search?' + new URLSearchParams({ q: query, count: '5' });
+        const options = apiKey ? { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+          body: JSON.stringify({ query, count: 5 }) }
+          : { method: 'GET', headers: { Accept: 'application/json', 'X-Subscription-Token': braveApiKey } };
+        const response = await fetchImpl(url, { ...options,
           signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000),
         });
         if (!response.ok) throw new Error(`Web search failed: HTTP ${response.status}`);
         const data = await response.json();
-        return result({ results: (data.results?.web || []).slice(0, 5).map(item => ({
+        return result({ provider: apiKey ? 'you.com' : 'brave', results: (apiKey ? data.results?.web || [] : data.web?.results || []).slice(0, 5).map(item => ({
           title: item.title, url: item.url, description: String(item.description || '').slice(0, 2000),
-          snippets: (item.snippets || []).slice(0, 3).map(text => String(text).slice(0, 2000)),
+          snippets: (item.snippets || item.extra_snippets || []).slice(0, 3).map(text => String(text).slice(0, 2000)),
         })) });
       },
     },

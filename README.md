@@ -93,3 +93,9 @@ with a separate JSONL file per attempt and paper. They capture full model inputs
 outputs, tool arguments/results and failure events. The review pipeline links
 each attempt's file from `status.json`. See
 [trace database format](trace_databases/README.md) for event fields and usage.
+
+A two-paper Quest pilot with Qwen3.5-9B in thinking mode is configured under
+[quest_computes](quest_computes/README.md). Agent thinking levels are selectable
+through `--thinking`; returned thinking is included in the full JSONL trajectory.
+You.com search accepts `YDC_API_KEY` or `YOU_COM_API_KEY`; Brave Search is available
+with `BRAVE_SEARCH_API_KEY` when no You.com key is configured.

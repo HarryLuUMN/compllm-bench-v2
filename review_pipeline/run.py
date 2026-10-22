@@ -43,12 +43,12 @@ def run(args, runner=subprocess.run):
     folders = sorted((p for p in args.database.resolve(strict=True).iterdir()
                       if p.is_dir() and not p.is_symlink() and p.name.startswith('paper_')
                       and p.name[6:].isdigit()), key=lambda p: int(p.name[6:]))
-    if not args.dry_run and not os.environ.get('YDC_API_KEY'):
-        raise ValueError('YDC_API_KEY is required: this experiment must perform web search')
+    if not args.dry_run and not (os.environ.get('YDC_API_KEY') or os.environ.get('YOU_COM_API_KEY') or os.environ.get('BRAVE_SEARCH_API_KEY')):
+        raise ValueError('YDC_API_KEY or BRAVE_SEARCH_API_KEY is required: this experiment must perform web search')
     args.output.mkdir(parents=True, exist_ok=True)
     counts = {'completed': 0, 'resumed': 0, 'missing_input': 0, 'failed': 0, 'ready': 0}
     attempted = 0
-    configuration = {'provider': args.provider, 'model': args.model, 'agent_dir': str(args.agent_dir),
+    configuration = {'provider': args.provider, 'model': args.model, 'thinking': args.thinking, 'agent_dir': str(args.agent_dir),
                      'sdk_path': os.environ.get('PI_SDK_PATH')}
     for folder in folders:
         destination = args.output / folder.name
@@ -76,7 +76,7 @@ def run(args, runner=subprocess.run):
             print(f'{folder.name}: ready', flush=True)
             continue
         status = {'status': 'running', 'paper': str(folder), 'fingerprint': key,
-                  'provider': args.provider, 'model': args.model}
+                  'provider': args.provider, 'model': args.model, 'thinking': args.thinking}
         write_json(status_path, status)
         try:
             with pdf.open('rb') as source:
@@ -99,7 +99,7 @@ def run(args, runner=subprocess.run):
                        '--prompt', str(prompt_path), '--question-file', str(question.resolve()),
                        '--output', str(pending.resolve()), '--trace', str(trace_path.resolve()),
                        '--trajectory', str(trajectory),
-                       '--agent-dir', str(args.agent_dir.resolve())]
+                       '--agent-dir', str(args.agent_dir.resolve()), '--thinking', args.thinking]
             if args.model:
                 command.extend(['--provider', args.provider, '--model', args.model])
             with (destination / 'run.log').open('w', encoding='utf-8') as log:
@@ -133,6 +133,7 @@ def parser():
     result.add_argument('--prompt', type=Path, default=ROOT / 'prompts/review_experiment.yaml')
     result.add_argument('--agent-dir', type=Path, default=ROOT.parent / 'pi-agent/agent')
     result.add_argument('--trace-root', type=Path, default=ROOT / 'trace_databases/paper_review')
+    result.add_argument('--thinking', choices=['off', 'low', 'medium', 'high'], default='off')
     result.add_argument('--provider')
     result.add_argument('--model')
     result.add_argument('--limit', type=int)

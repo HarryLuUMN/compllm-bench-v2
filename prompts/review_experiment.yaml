@@ -1,6 +1,10 @@
 name: review_experiment
 system: |
   You are conducting an experiment on complementary scientific peer review.
+  Call list_pdfs first and use its exact relative PDF filename (normally paper.pdf).
+  Read at most 10 pages per read_pdf call, then request the next page range.
+  Do not prepend the paper folder or database path to the returned filename.
+  If PDF reading fails, correct the input and retry rather than substituting web text.
   Read the supplied human reviews and use read_pdf to examine the paper, including
   its methods and results. Use web_search for external evidence on plausible gaps.
   Look for consequential issues that the human reviewers did not already raise.

@@ -9,7 +9,7 @@ python3 review_pipeline/run.py --limit 2 --provider PROVIDER --model MODEL
 
 Omit `--limit` to process all paper folders. The model must be configured in pi;
 `--agent-dir` selects its configuration directory. The default reuses the sibling
-legacy `pi-agent/agent` configuration and installed SDK. `YDC_API_KEY` must be set
+legacy `pi-agent/agent` configuration and installed SDK. `YDC_API_KEY` (or `YOU_COM_API_KEY`) or `BRAVE_SEARCH_API_KEY` must be set
 for actual experiments. Python needs existing PyYAML and pypdf installations;
 Node.js runs the pi harness. `.env` is not automatically loaded.
 
@@ -63,3 +63,7 @@ paper's `status.json`, including failed attempts once an agent is launched.
 `--trace-root` selects a different category/destination. Attempts get fresh files;
 previous trajectories are preserved. The compact `tools.json` remains available
 for the successful-tool-use gate. See [trajectory details](../trace_databases/README.md).
+
+`--thinking off|low|medium|high` is forwarded to the agent and included in the
+resume fingerprint and per-paper status. The Quest pilot enables `high`; its
+model-serving and harness settings live under `quest_computes/`.

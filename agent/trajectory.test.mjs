@@ -73,7 +73,8 @@ test('actual pi SDK records two model requests, tool arguments/results and final
       choices: [{ index: 0, delta, finish_reason }],
     })}\n\n`);
     if (requests === 1) {
-      chunk({ role: 'assistant', tool_calls: [{ index: 0, id: 'call_list', type: 'function',
+      chunk({ role: 'assistant', reasoning_content: 'First inspect the local documents.' });
+      chunk({ tool_calls: [{ index: 0, id: 'call_list', type: 'function',
         function: { name: 'list_pdfs', arguments: '{}' } }] });
       chunk({}, 'tool_calls');
     } else {
@@ -90,17 +91,19 @@ test('actual pi SDK records two model requests, tool arguments/results and final
     const secret = 'test-key-never-log-this';
     await writeFile(join(agentDir, 'models.json'), JSON.stringify({ providers: { 'trace-test': {
       baseUrl: `http://127.0.0.1:${server.address().port}/v1`, api: 'openai-completions', apiKey: secret,
-      models: [{ id: 'trace-model', name: 'Trace test', input: ['text'], reasoning: false,
+      models: [{ id: 'trace-model', name: 'Trace test', input: ['text'], reasoning: true,
         contextWindow: 32768, maxTokens: 1024, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }],
     } } }));
     const file = join(root, 'trace.jsonl');
     const responseFile = join(root, 'response.txt'), toolsFile = join(root, 'tools.json');
     const result = await run(['--folder', folder, '--agent-dir', agentDir, '--provider', 'trace-test',
-      '--model', 'trace-model', '--question', 'List the available PDFs.', '--trajectory', file,
+      '--model', 'trace-model', '--thinking', 'high', '--question', 'List the available PDFs.', '--trajectory', file,
       '--output', responseFile, '--trace', toolsFile]);
     assert.equal(result.code, 0, result.stderr);
     assert.equal(requests, 2);
     const events = await rows(file);
+    assert.equal(events[0].data.thinking_level, 'high');
+    assert.ok(events.some(row => row.type === 'message_end' && Array.isArray(row.data.message.content) && row.data.message.content.some(block => block.type === 'thinking')));
     assert.equal(events.filter(row => row.type === 'model_input').length, 2);
     assert.equal(events.filter(row => row.type === 'provider_request').length, 2);
     assert.equal(events.filter(row => row.type === 'tool_execution_start')[0].data.toolCallId, 'call_list');
@@ -131,5 +134,14 @@ test('initialization failures still persist an error and failed run status', asy
     const events = await rows(file);
     assert.ok(events.some(row => row.type === 'run_error' && row.data.error.message.includes('Unknown model')));
     assert.equal(events.at(-1).data.status, 'failed');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('Brave credential headers are redacted in recorded objects', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-trace-'));
+  try {
+    const trace = new Trajectory({ root, folder: root, metadata: {} });
+    trace.record('test', { headers: { 'X-Subscription-Token': 'secret' } });
+    assert.equal((await rows(trace.file))[1].data.headers['X-Subscription-Token'], '[REDACTED]');
   } finally { await rm(root, { recursive: true, force: true }); }
 });

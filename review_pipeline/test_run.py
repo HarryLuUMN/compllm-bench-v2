@@ -72,6 +72,13 @@ class PipelineTests(unittest.TestCase):
             self.assertFalse((args.output / 'paper_0001/response.txt').exists())
             self.assertEqual(pipeline.run(args, self.fake_agent)['completed'], 1)
 
+    @patch.dict(os.environ, {'YOU_COM_API_KEY': 'test-only'}, clear=True)
+    def test_you_com_alias_is_accepted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = self.setup_run(Path(tmp))
+            args.limit = 1
+            self.assertEqual(pipeline.run(args, self.fake_agent)['completed'], 1)
+
     def test_dry_run_needs_no_search_credentials(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {}, clear=True):
             args = self.setup_run(Path(tmp))

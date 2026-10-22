@@ -12,10 +12,11 @@ const { values } = parseArgs({ options: {
   question: { type: 'string' }, 'question-file': { type: 'string' }, output: { type: 'string' }, trace: { type: 'string' }, provider: { type: 'string' }, model: { type: 'string' },
   'agent-dir': { type: 'string', default: resolve(here, '../../pi-agent/agent') },
   trajectory: { type: 'string' }, 'trace-root': { type: 'string', default: resolve(here, '../trace_databases/paper_review') },
+  thinking: { type: 'string', default: 'off' },
   check: { type: 'boolean' }, help: { type: 'boolean' },
 } });
 if (values.help) {
-  console.log('node new-codebase/agent/run.mjs --folder PATH --question TEXT [--provider NAME --model ID] [--prompt YAML] [--agent-dir PATH] [--trace-root PATH] [--trajectory FILE.jsonl] [--check]');
+  console.log('node new-codebase/agent/run.mjs --folder PATH --question TEXT [--provider NAME --model ID] [--prompt YAML] [--agent-dir PATH] [--thinking off|low|medium|high] [--trace-root PATH] [--trajectory FILE.jsonl] [--check]');
   process.exit(0);
 }
 const prompt = await python(['prompt', resolve(values.prompt)]);
@@ -32,10 +33,11 @@ if (values.question && values['question-file']) throw new Error('Choose --questi
 const question = values['question-file'] ? await readFile(resolve(values['question-file']), 'utf8') : values.question;
 if (!question?.trim()) throw new Error('--question or --question-file is required');
 if (Boolean(values.provider) !== Boolean(values.model)) throw new Error('Specify --provider and --model together');
+if (!['off', 'low', 'medium', 'high'].includes(values.thinking)) throw new Error('Invalid --thinking level');
 const trajectory = new Trajectory({ root: resolve(values['trace-root']),
   file: values.trajectory, folder: resolve(values.folder), metadata: {
     prompt_path: resolve(values.prompt), system_prompt: prompt.system, question,
-    requested_provider: values.provider, requested_model: values.model,
+    requested_provider: values.provider, requested_model: values.model, thinking_level: values.thinking,
     tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
   } });
 console.error(`[trajectory] ${trajectory.file}`);
@@ -56,7 +58,7 @@ try {
   });
   await loader.reload();
   const loaded = await createAgentSession({ cwd: resolve(values.folder), agentDir,
-    modelRuntime: runtime, ...(model ? { model } : {}), resourceLoader: loader,
+    modelRuntime: runtime, thinkingLevel: values.thinking, ...(model ? { model } : {}), resourceLoader: loader,
     tools: tools.map(tool => tool.name), customTools: tools,
     sessionManager: SessionManager.inMemory(), settingsManager: settings,
   });

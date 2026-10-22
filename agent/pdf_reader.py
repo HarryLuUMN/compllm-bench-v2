@@ -13,7 +13,7 @@ def read_pdf(root, filename, start_page=1, end_page=None):
     reader = PdfReader(path)
     end_page = min(start_page + 4, len(reader.pages)) if end_page is None else end_page
     if not 1 <= start_page <= end_page <= len(reader.pages) or end_page - start_page >= 10:
-        raise ValueError('Choose a valid range of at most 10 pages, numbered from 1')
+        raise ValueError(f'PDF has {len(reader.pages)} pages. Choose an inclusive range of at most 10 pages, numbered from 1.')
     pages = []
     remaining = 60000
     for number in range(start_page, end_page + 1):

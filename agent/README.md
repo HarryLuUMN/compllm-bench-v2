@@ -28,8 +28,9 @@ its model/auth configuration in `pi-agent/agent`. Select a configured model with
 No packages are installed by this implementation.
 
 Python uses the existing `pypdf` and `PyYAML` installations. Set `PYTHON` if they
-are installed in a specific environment. Web search uses You.com and requires
-`YDC_API_KEY` in the environment; `.env` is not automatically loaded.
+are installed in a specific environment. Web search uses You.com with
+`YDC_API_KEY` (or `YOU_COM_API_KEY`), or Brave Search with
+`BRAVE_SEARCH_API_KEY` when no You.com key is configured; `.env` is not automatically loaded.
 
 `--folder` defaults to `new-codebase/paper_database`. `--prompt` defaults to
 `new-codebase/prompts/paper_assistant.yaml`; alternative YAML files must have a
@@ -65,3 +66,7 @@ streamed and final outputs, tool arguments/results, retries and errors. Choose a
 different category using `--trace-root`, or an exact new path using `--trajectory`.
 See [trajectory format](../trace_databases/README.md). `--trace FILE` continues to
 save the small tool-success summary used by the review pipeline.
+
+`--thinking off|low|medium|high` selects the pi thinking level (default `off`).
+Use a reasoning-capable model and matching server-side thinking settings. Returned
+thinking content is retained in the full trajectory alongside final text.

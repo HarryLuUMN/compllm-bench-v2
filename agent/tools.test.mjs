@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, symlink, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createTools, python } from './tools.mjs';
 
-const paper = resolve('new-codebase/paper_database/paper_0001');
+const paper = fileURLToPath(new URL('../paper_database/paper_0001', import.meta.url));
 
 test('real PDF text includes page numbers and rejects invalid ranges', async () => {
   const tools = await createTools(paper);
@@ -48,4 +49,18 @@ test('web search sends expected request and handles missing keys and HTTP errors
   await assert.rejects(missing[2].execute('', { query: 'test' }), /YDC_API_KEY/);
   const failed = await createTools(paper, { apiKey: 'test-only', fetchImpl: async () => ({ ok: false, status: 429 }) });
   await assert.rejects(failed[2].execute('', { query: 'test' }), /429/);
+});
+
+test('Brave search uses the configured key when You.com is not configured', async () => {
+  const tools = await createTools(paper, { apiKey: '', braveApiKey: 'test-only', fetchImpl: async (url, options) => {
+    const parsed = new URL(url);
+    assert.equal(parsed.hostname, 'api.search.brave.com');
+    assert.equal(parsed.searchParams.get('q'), 'test query');
+    assert.equal(options.method, 'GET');
+    assert.equal(options.headers['X-Subscription-Token'], 'test-only');
+    return { ok: true, json: async () => ({ web: { results: [{ title: 'Evidence', url: 'https://example.org', extra_snippets: ['evidence'] }] } }) };
+  } });
+  const value = JSON.parse((await tools[2].execute('', { query: 'test query' })).content[0].text);
+  assert.equal(value.provider, 'brave');
+  assert.deepEqual(value.results[0].snippets, ['evidence']);
 });
