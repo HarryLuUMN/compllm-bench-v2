@@ -83,3 +83,11 @@ input formats, model definitions, outputs and statistical interpretation limits.
 Compute settings and the reused legacy numerical environment specification live
 in `quest_computes/statistical_modeling.yaml` and
 `quest_computes/statistical_modeling_requirements.txt`.
+
+## Agent trajectory records
+
+Agent interactions are saved incrementally under `trace_databases/paper_review/`,
+with a separate JSONL file per attempt and paper. They capture full model inputs,
+outputs, tool arguments/results and failure events. The review pipeline links
+each attempt's file from `status.json`. See
+[trace database format](trace_databases/README.md) for event fields and usage.

@@ -20,7 +20,7 @@ class PipelineTests(unittest.TestCase):
             (folder / 'human_reviews').mkdir(parents=True)
             (folder / 'human_reviews/reviews.json').write_text(json.dumps({'text': 'Human comment'}))
             (folder / 'paper.pdf').write_bytes(b'%PDF-test')
-        return pipeline.parser().parse_args(['--database', str(database), '--output', str(root / 'results')])
+        return pipeline.parser().parse_args(['--database', str(database), '--output', str(root / 'results'), '--trace-root', str(root / 'traces')])
 
     def fake_agent(self, command, **kwargs):
         def option(name):
@@ -28,6 +28,9 @@ class PipelineTests(unittest.TestCase):
         self.assertIn('Human comment', option('--question-file').read_text())
         self.assertEqual(option('--prompt').parent.name, 'prompts')
         option('--output').write_text('A possible missing methodological issue, supported by evidence.\n')
+        trajectory = option('--trajectory')
+        trajectory.parent.mkdir(parents=True, exist_ok=True)
+        trajectory.write_text('{"type":"run_end","data":{"status":"completed"}}\n')
         option('--trace').write_text(json.dumps([{'tool': 'read_pdf', 'success': True},
                                                {'tool': 'web_search', 'success': True}]))
         return SimpleNamespace(returncode=0)
@@ -42,6 +45,9 @@ class PipelineTests(unittest.TestCase):
             summary = pipeline.run(args, self.fake_agent)
             self.assertEqual(summary['completed'], 1)
             self.assertEqual(summary['resumed'], 1)
+            status = json.loads((args.output / 'paper_0001/status.json').read_text())
+            self.assertTrue(Path(status['trajectory']).is_file())
+            self.assertEqual(len(list((args.trace_root / 'paper_0001').glob('*.jsonl'))), 2)
 
     @patch.dict(os.environ, {'YDC_API_KEY': 'test-only'})
     def test_missing_pdf_and_failed_agent_are_not_completed(self):

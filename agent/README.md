@@ -58,3 +58,10 @@ node --test new-codebase/agent/tools.test.mjs
 `--check` loads the YAML, imports the actual pi SDK and lists local PDFs, without
 calling a model. The tests require the downloaded `paper_0001/paper.pdf` fixture;
 they validate real PDF extraction and mock web requests without credentials.
+
+Every actual run now saves its full trajectory under
+`trace_databases/paper_review/<folder>/`. This includes each model request/context,
+streamed and final outputs, tool arguments/results, retries and errors. Choose a
+different category using `--trace-root`, or an exact new path using `--trajectory`.
+See [trajectory format](../trace_databases/README.md). `--trace FILE` continues to
+save the small tool-success summary used by the review pipeline.

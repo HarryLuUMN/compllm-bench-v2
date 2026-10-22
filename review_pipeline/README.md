@@ -54,3 +54,12 @@ Tests (no live model or web credentials needed):
 ```sh
 python3 -m unittest discover -s review_pipeline -p 'test_*.py'
 ```
+
+## Full agent trajectories
+
+Each agent attempt also saves an independent full JSONL trajectory under
+`trace_databases/paper_review/<paper>/`. Its path is stored as `trajectory` in the
+paper's `status.json`, including failed attempts once an agent is launched.
+`--trace-root` selects a different category/destination. Attempts get fresh files;
+previous trajectories are preserved. The compact `tools.json` remains available
+for the successful-tool-use gate. See [trajectory details](../trace_databases/README.md).

@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 import yaml
@@ -60,7 +61,7 @@ def run(args, runner=subprocess.run):
             write_json(status_path, {'status': 'missing_input', 'paper': str(folder)})
             continue
         key = fingerprint([pdf, reviews_path, prompt_path, ROOT / 'agent/run.mjs',
-                           ROOT / 'agent/tools.mjs', ROOT / 'agent/pdf_reader.py', Path(__file__)], configuration)
+                           ROOT / 'agent/tools.mjs', ROOT / 'agent/pdf_reader.py', ROOT / 'agent/trajectory.mjs', Path(__file__)], configuration)
         response_path = destination / 'response.txt'
         previous = json.loads(status_path.read_text()) if status_path.exists() else {}
         if (previous.get('status') == 'completed' and previous.get('fingerprint') == key
@@ -89,16 +90,22 @@ def run(args, runner=subprocess.run):
             question.write_text(task, encoding='utf-8')
             pending = destination / 'response.pending.txt'
             trace_path = destination / 'tools.json'
+            trajectory = (args.trace_root / folder.name / (uuid.uuid4().hex + '.jsonl')).resolve()
+            status['trajectory'] = str(trajectory)
+            write_json(status_path, status)
             pending.unlink(missing_ok=True)
             trace_path.unlink(missing_ok=True)
             command = ['node', str(ROOT / 'agent/run.mjs'), '--folder', str(folder),
                        '--prompt', str(prompt_path), '--question-file', str(question.resolve()),
                        '--output', str(pending.resolve()), '--trace', str(trace_path.resolve()),
+                       '--trajectory', str(trajectory),
                        '--agent-dir', str(args.agent_dir.resolve())]
             if args.model:
                 command.extend(['--provider', args.provider, '--model', args.model])
             with (destination / 'run.log').open('w', encoding='utf-8') as log:
                 result = runner(command, stdout=log, stderr=subprocess.STDOUT, timeout=args.timeout, check=False)
+            if not trajectory.is_file() or not trajectory.stat().st_size:
+                raise ValueError('Agent did not save a trajectory')
             if result.returncode:
                 raise ValueError(f'Agent exited with code {result.returncode}; see run.log')
             successful_tools = {event['tool'] for event in json.loads(trace_path.read_text()) if event['success']}
@@ -125,6 +132,7 @@ def parser():
     result.add_argument('--output', type=Path, default=ROOT / 'review_pipeline/results')
     result.add_argument('--prompt', type=Path, default=ROOT / 'prompts/review_experiment.yaml')
     result.add_argument('--agent-dir', type=Path, default=ROOT.parent / 'pi-agent/agent')
+    result.add_argument('--trace-root', type=Path, default=ROOT / 'trace_databases/paper_review')
     result.add_argument('--provider')
     result.add_argument('--model')
     result.add_argument('--limit', type=int)
