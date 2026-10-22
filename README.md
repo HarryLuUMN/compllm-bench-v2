@@ -99,3 +99,9 @@ A two-paper Quest pilot with Qwen3.5-9B in thinking mode is configured under
 through `--thinking`; returned thinking is included in the full JSONL trajectory.
 You.com search accepts `YDC_API_KEY` or `YOU_COM_API_KEY`; Brave Search is available
 with `BRAVE_SEARCH_API_KEY` when no You.com key is configured.
+
+### Trace viewer
+
+Run `python3 trace_ui/server.py`, then open <http://127.0.0.1:8765>.
+The local viewer follows JSONL trajectories and displays inputs, thinking, outputs,
+tool calls, search results and PDF text. See [trace_ui](trace_ui/README.md).
