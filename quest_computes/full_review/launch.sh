@@ -3,7 +3,7 @@ set -euo pipefail
 : "${SLURM_JOB_ID:?Run inside the four-GPU allocation}"
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$repo_root"
-export REVIEW_RUN_ID=${REVIEW_RUN_ID:-quest_qwen38_27b_full_20261023}
+export REVIEW_RUN_ID=${REVIEW_RUN_ID:-quest_qwen38_27b_medium_full_20261023}
 runtime="$repo_root/quest_computes/pi_runtime/$REVIEW_RUN_ID"
 mkdir -p "$runtime"
 server_pids=()
@@ -41,9 +41,6 @@ for attempt in range(360):
 else:
     raise SystemExit('Servers did not become ready within 30 minutes')
 PY
-echo 'EIGHT_PAPER_SMOKE_START'
-bash quest_computes/full_review/run_batch.sh --limit 1
-echo 'EIGHT_PAPER_SMOKE_PASSED'
 while [[ ! -f "$runtime/dataset_ready.json" ]]; do
   echo 'Waiting for verified dataset transfer'
   sleep 30

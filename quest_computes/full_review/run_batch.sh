@@ -7,7 +7,7 @@ export PATH="$repo_root/quest_computes/pi_runtime/node-v22.22.0-linux-x64/bin:$P
 export PYTHON="$repo_root/quest_computes/pi_runtime/python/bin/python"
 export PI_SDK_PATH="$repo_root/quest_computes/pi_runtime/node_modules/@earendil-works/pi-coding-agent/dist/index.js"
 source quest_computes/pi_runtime/search.env
-run_id=${REVIEW_RUN_ID:-quest_qwen38_27b_full_20261023}
+run_id=${REVIEW_RUN_ID:-quest_qwen38_27b_medium_full_20261023}
 runtime="$repo_root/quest_computes/pi_runtime/$run_id"
 mkdir -p "$runtime"
 exec 9>"$runtime/batch.lock"
@@ -21,7 +21,7 @@ for shard in range(8):
     directory.mkdir(exist_ok=True)
     model = {'id': 'qwen38-27b-review', 'name': 'Qwen3.8-27B BF16', 'reasoning': True,
              'input': ['text'], 'contextWindow': 131072, 'maxTokens': 32768,
-             'thinkingLevelMap': {'high': 'xhigh'},
+             'thinkingLevelMap': {'high': 'xhigh', 'medium': 'medium'},
              'compat': {'supportsDeveloperRole': False, 'supportsReasoningEffort': False,
                         'thinkingFormat': 'chat-template',
                         'requiresReasoningContentOnAssistantMessages': True,
@@ -37,7 +37,7 @@ PY
 pids=()
 for shard in 0 1 2 3 4 5 6 7; do
   "$PYTHON" review_pipeline/run.py --database paper_database \
-    --provider quest-review --model qwen38-27b-review --thinking high \
+    --provider quest-review --model qwen38-27b-review --thinking medium \
     --agent-dir "$runtime/agent_$shard" --timeout 3600 \
     --shard-count 8 --shard-index "$shard" --require-full-pdf --require-thinking \
     --prompt prompts/full_paper_review.yaml \

@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DATABASE = ROOT / 'paper_database'
-RUN_ID = os.environ.get('REVIEW_RUN_ID', 'quest_qwen38_27b_full_20261023')
+RUN_ID = os.environ.get('REVIEW_RUN_ID', 'quest_qwen38_27b_medium_full_20261023')
 MARKER = ROOT / 'quest_computes/pi_runtime' / RUN_ID / 'dataset_ready.json'
 
 

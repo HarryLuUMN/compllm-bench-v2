@@ -98,8 +98,7 @@ evidence, not a validation of the scientific correctness of proposed omissions.
 `Qwen/Qwen3.8-27B`, revision `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`,
 one per A100 80GB, serving two concurrent paper requests. CUDA graph
 compilation is enabled for sustained throughput. Each server uses a 131072-token context, a 32768-token
-per-call output budget and Qwen's tool/reasoning parsers. Pi's `high` maps to
-Qwen's `xhigh`; thinking is preserved between turns. The existing vLLM runtime
+per-call output budget and Qwen's tool/reasoning parsers. The full run uses `medium` reasoning; thinking is preserved between turns. The existing vLLM runtime
 is reused. Sampling follows the official thinking-mode recommendations.
 
 Inside an allocated four-GPU Slurm step, from the v2 repository root:
@@ -108,9 +107,10 @@ Inside an allocated four-GPU Slurm step, from the v2 repository root:
 bash quest_computes/full_review/launch.sh
 ```
 
-The launcher waits for all four endpoints, then performs one paper per each of eight shards.
-All eight must pass PDF page coverage, successful search, nonempty thinking and
-non-truncated final output checks before the full batch starts. Use
+The launcher waits for all four endpoints and the dataset readiness marker, then
+starts the full eight-shard medium run directly, without a pilot. Each paper must
+pass PDF page coverage, successful search, nonempty thinking and non-truncated
+final output checks. Use
 `prompts/full_paper_review.yaml` for these runs. Numeric dataset indices are
 sharded deterministically; the same command resumes completed matching inputs.
 One missing PDF (`paper_0699`) is recorded as missing input.
@@ -118,9 +118,9 @@ One missing PDF (`paper_0699`) is recorded as missing input.
 Run `python quest_computes/full_review/wait_dataset.py` alongside the transfer.
 It checks all 5023 expected PDF signatures and available source checksums before
 writing the dataset readiness marker. The full batch waits for this marker;
-the eight-paper smoke can run while the remaining inputs transfer.
+full processing starts when the remaining inputs have arrived and passed verification.
 
-Default run ID: `quest_qwen38_27b_full_20261023` (`REVIEW_RUN_ID` overrides it).
+Default run ID: `quest_qwen38_27b_medium_full_20261023` (`REVIEW_RUN_ID` overrides it).
 Results are in `review_pipeline/results/<run>/shard_<0..7>/paper_<index>/`;
 `response.txt`, `thinking.txt`, `status.json` and tool logs are saved per paper.
 All JSONL trajectories are in `trace_databases/paper_review/<run>/paper_<index>/`.
@@ -147,3 +147,6 @@ the waiting controller cannot process the same papers concurrently. When
 verified PDFs are already far ahead of the review workers and all metadata/reviews
 are present, `run_batch.sh` may process them while the remaining source downloads
 continue. The waiting controller resumes matching completed papers afterward.
+
+The medium run has a separate run ID from the earlier xhigh attempt. Existing
+xhigh results and trajectories remain preserved and are not reused as medium results.
