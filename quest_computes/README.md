@@ -96,7 +96,8 @@ evidence, not a validation of the scientific correctness of proposed omissions.
 
 `full_review/` runs four independent BF16 replicas of official
 `Qwen/Qwen3.8-27B`, revision `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`,
-one per A100 80GB. Each server uses a 131072-token context, a 32768-token
+one per A100 80GB, serving two concurrent paper requests. CUDA graph
+compilation is enabled for sustained throughput. Each server uses a 131072-token context, a 32768-token
 per-call output budget and Qwen's tool/reasoning parsers. Pi's `high` maps to
 Qwen's `xhigh`; thinking is preserved between turns. The existing vLLM runtime
 is reused. Sampling follows the official thinking-mode recommendations.
@@ -107,8 +108,8 @@ Inside an allocated four-GPU Slurm step, from the v2 repository root:
 bash quest_computes/full_review/launch.sh
 ```
 
-The launcher waits for all four endpoints, then performs one paper per shard.
-All four must pass PDF page coverage, successful search, nonempty thinking and
+The launcher waits for all four endpoints, then performs one paper per each of eight shards.
+All eight must pass PDF page coverage, successful search, nonempty thinking and
 non-truncated final output checks before the full batch starts. Use
 `prompts/full_paper_review.yaml` for these runs. Numeric dataset indices are
 sharded deterministically; the same command resumes completed matching inputs.
@@ -117,10 +118,10 @@ One missing PDF (`paper_0699`) is recorded as missing input.
 Run `python quest_computes/full_review/wait_dataset.py` alongside the transfer.
 It checks all 5023 expected PDF signatures and available source checksums before
 writing the dataset readiness marker. The full batch waits for this marker;
-the four-paper smoke can run while the remaining inputs transfer.
+the eight-paper smoke can run while the remaining inputs transfer.
 
 Default run ID: `quest_qwen38_27b_full_20261023` (`REVIEW_RUN_ID` overrides it).
-Results are in `review_pipeline/results/<run>/shard_<0..3>/paper_<index>/`;
+Results are in `review_pipeline/results/<run>/shard_<0..7>/paper_<index>/`;
 `response.txt`, `thinking.txt`, `status.json` and tool logs are saved per paper.
 All JSONL trajectories are in `trace_databases/paper_review/<run>/paper_<index>/`.
 Server and batch logs are under the ignored `quest_computes/pi_runtime/<run>/`.

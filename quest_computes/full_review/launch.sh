@@ -41,9 +41,9 @@ for attempt in range(360):
 else:
     raise SystemExit('Servers did not become ready within 30 minutes')
 PY
-echo 'FOUR_PAPER_SMOKE_START'
+echo 'EIGHT_PAPER_SMOKE_START'
 bash quest_computes/full_review/run_batch.sh --limit 1
-echo 'FOUR_PAPER_SMOKE_PASSED'
+echo 'EIGHT_PAPER_SMOKE_PASSED'
 while [[ ! -f "$runtime/dataset_ready.json" ]]; do
   echo 'Waiting for verified dataset transfer'
   sleep 30

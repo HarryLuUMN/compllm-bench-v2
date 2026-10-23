@@ -14,7 +14,7 @@ mkdir -p "$runtime"
 import json
 import sys
 from pathlib import Path
-for shard in range(4):
+for shard in range(8):
     directory = Path(sys.argv[1]) / f'agent_{shard}'
     directory.mkdir(exist_ok=True)
     model = {'id': 'qwen38-27b-review', 'name': 'Qwen3.8-27B BF16', 'reasoning': True,
@@ -27,17 +27,17 @@ for shard in range(4):
                                                'preserve_thinking': True,
                                                'reasoning_effort': {'$var': 'thinking.effort'}}},
              'cost': {'input': 0, 'output': 0, 'cacheRead': 0, 'cacheWrite': 0}}
-    config = {'providers': {'quest-review': {'baseUrl': f'http://127.0.0.1:{24200 + shard}/v1',
+    config = {'providers': {'quest-review': {'baseUrl': f'http://127.0.0.1:{24200 + shard % 4}/v1',
                                            'api': 'openai-completions', 'apiKey': 'local-review',
                                            'models': [model]}}}
     (directory / 'models.json').write_text(json.dumps(config, indent=2) + '\n')
 PY
 pids=()
-for shard in 0 1 2 3; do
+for shard in 0 1 2 3 4 5 6 7; do
   "$PYTHON" review_pipeline/run.py --database paper_database \
     --provider quest-review --model qwen38-27b-review --thinking high \
     --agent-dir "$runtime/agent_$shard" --timeout 3600 \
-    --shard-count 4 --shard-index "$shard" --require-full-pdf --require-thinking \
+    --shard-count 8 --shard-index "$shard" --require-full-pdf --require-thinking \
     --prompt prompts/full_paper_review.yaml \
     --trace-root "trace_databases/paper_review/$run_id" \
     --output "review_pipeline/results/$run_id/shard_$shard" "$@" \

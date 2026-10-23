@@ -12,8 +12,8 @@ server_model=${MODEL_PATH:-/gpfs/projects/p32963/huggingface/hub/models--Qwen--Q
 exec "$server_python" -m vllm.entrypoints.openai.api_server \
   --model "$server_model" --served-model-name qwen38-27b-review \
   --host 127.0.0.1 --port "${SERVER_PORT:-24200}" \
-  --max-model-len 131072 --max-num-seqs 1 --max-num-batched-tokens 8192 \
-  --gpu-memory-utilization 0.92 --enforce-eager --language-model-only \
+  --max-model-len 131072 --max-num-seqs 2 --max-num-batched-tokens 8192 \
+  --gpu-memory-utilization 0.90 --language-model-only \
   --enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3 \
   --default-chat-template-kwargs '{"enable_thinking":true,"preserve_thinking":true,"reasoning_effort":"xhigh"}' \
   --override-generation-config '{"temperature":1.0,"top_p":0.95,"top_k":20,"min_p":0.0,"presence_penalty":0.0,"repetition_penalty":1.0}'
