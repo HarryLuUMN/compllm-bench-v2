@@ -53,6 +53,44 @@ class UsageTests(unittest.TestCase):
             self.assertEqual(report['attempts'][1]['malformed_lines'], 1)
             self.assertEqual(len(report['papers']), 3)
 
+    def test_provider_usage_captures_compaction_without_duplicates(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            trace = Path(temporary) / 'trace.jsonl'
+            rows = [
+                {'type': 'provider_request', 'request': 1, 'data': {}},
+                {'type': 'provider_stream_event', 'request': 1, 'data': {'data': {'usage': {
+                    'prompt_tokens': 120, 'completion_tokens': 40,
+                    'prompt_tokens_details': {'cached_tokens': 20},
+                    'completion_tokens_details': {'reasoning_tokens': 30}}}}},
+                {'type': 'message_end', 'request': 1, 'data': {'message': {'role': 'assistant',
+                    'usage': {'input': 100, 'cacheRead': 20, 'output': 40, 'reasoning': 30}}}},
+                {'type': 'provider_request', 'request': 2, 'data': {}},
+                {'type': 'provider_stream_event', 'request': 2, 'data': {'data': {'usage': {
+                    'prompt_tokens': 10, 'completion_tokens': 5}}}},
+            ]
+            trace.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+            usage = module.read_trace(trace)['usage']
+            self.assertEqual(usage['input'], 110)
+            self.assertEqual(usage['cache_read'], 20)
+            self.assertEqual(usage['output'], 45)
+            self.assertEqual(usage['total'], 175)
+            self.assertEqual(usage['reasoning_subset'], 30)
+
+    def test_sidecar_skips_large_trace_and_preserves_unknown_tool_counts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            trace = Path(temporary) / 'trace.jsonl'
+            trace.write_text('not parsed')
+            sidecar = trace.with_suffix('.jsonl.tokens.json')
+            sidecar.write_text(json.dumps({'provider': 'quest', 'model': '27B', 'thinking': 'high',
+                'requests_started': 2, 'totals': {'input': 100, 'cacheRead': 20, 'cacheWrite': 10,
+                'output': 40, 'reasoning': 30, 'totalTokens': 170}}))
+            result = module.read_trace(trace)
+            self.assertEqual(result['usage_source'], 'sidecar')
+            self.assertEqual(result['usage']['total'], 170)
+            self.assertEqual(result['usage']['reasoning_subset'], 30)
+            self.assertIsNone(result['usage']['web_search_starts'])
+            self.assertEqual(result['malformed_lines'], 0)
+
     def test_empty_report_is_zero(self):
         with tempfile.TemporaryDirectory() as temporary:
             args = module.parser().parse_args(['--results', temporary, '--traces', temporary])
