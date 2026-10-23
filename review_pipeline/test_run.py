@@ -90,5 +90,88 @@ class PipelineTests(unittest.TestCase):
                 pipeline.run(args)
 
 
+    def test_shards_cover_dataset_without_overlap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            args = self.setup_run(root)
+            selected = []
+            for shard in range(4):
+                args.shard_count = 4
+                args.shard_index = shard
+                args.dry_run = True
+                args.output = root / f'shard_{shard}'
+                pipeline.run(args)
+                selected.append({p.name for p in args.output.iterdir() if p.is_dir()})
+            self.assertEqual(set.union(*selected), {'paper_0001', 'paper_0002'})
+            self.assertEqual(sum(map(len, selected)), 2)
+            self.assertEqual(selected[0], {'paper_0001'})
+            self.assertEqual(selected[1], {'paper_0002'})
+            for count, index in [(0, 0), (2, -1), (2, 2)]:
+                args.shard_count, args.shard_index = count, index
+                with self.assertRaisesRegex(ValueError, 'shard'):
+                    pipeline.run(args)
+
+    def strict_agent(self, command, **kwargs):
+        result = self.fake_agent(command, **kwargs)
+        trace = Path(command[command.index('--trajectory') + 1])
+        rows = [
+            {'type': 'tool_execution_end', 'data': {'toolName': 'read_pdf', 'isError': False,
+             'result': {'content': [{'type': 'text', 'text': json.dumps({
+                 'file': 'paper.pdf', 'total_pages': 2,
+                 'pages': [{'page': 1, 'text': 'one', 'truncated': False},
+                           {'page': 2, 'text': 'two', 'truncated': False}]})}]}}},
+            {'type': 'message_end', 'data': {'message': {'role': 'assistant', 'stopReason': 'stop',
+             'content': [{'type': 'thinking', 'thinking': 'Check the evidence.'}]}}}]
+        trace.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+        return result
+
+    @patch.dict(os.environ, {'YDC_API_KEY': 'test-only'})
+    def test_strict_success_exports_metrics_and_thinking(self):
+        from pypdf import PdfWriter
+        with tempfile.TemporaryDirectory() as tmp:
+            args = self.setup_run(Path(tmp))
+            writer = PdfWriter()
+            for _ in range(2):
+                writer.add_blank_page(width=100, height=100)
+            writer.write(args.database / 'paper_0001/paper.pdf')
+            args.limit = 1
+            args.require_full_pdf = args.require_thinking = True
+            self.assertEqual(pipeline.run(args, self.strict_agent)['completed'], 1)
+            result = args.output / 'paper_0001'
+            status = json.loads((result / 'status.json').read_text())
+            self.assertGreaterEqual(status['elapsed_seconds'], 0)
+            self.assertIn('+00:00', status['completed_at'])
+            self.assertEqual(status['audit']['pdf_pages_total'], 2)
+            self.assertEqual(status['audit']['pdf_pages_read'], [1, 2])
+            self.assertEqual((result / 'thinking.txt').read_text().strip(), 'Check the evidence.')
+
+    def test_audit_rejects_incomplete_truncated_and_missing_thinking(self):
+        from pypdf import PdfWriter
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pdf = root / 'paper.pdf'
+            writer = PdfWriter()
+            for _ in range(2):
+                writer.add_blank_page(width=100, height=100)
+            writer.write(pdf)
+            trace = root / 'trace.jsonl'
+            tool = {'type': 'tool_execution_end', 'data': {'toolName': 'read_pdf', 'result': {
+                'content': [{'type': 'text', 'text': json.dumps({'file': 'paper.pdf',
+                'total_pages': 1, 'pages': [{'page': 1, 'truncated': True}, {'page': 2}]})}]}}}
+            message = {'type': 'message_end', 'data': {'message': {'role': 'assistant',
+                       'stopReason': 'length', 'content': [{'type': 'thinking', 'thinking': '   '}]}}}
+            trace.write_text(json.dumps(tool) + '\n' + json.dumps(message) + '\n')
+            metrics, thinking, errors = pipeline.audit_trajectory(trace, pdf, True, True)
+            self.assertEqual(metrics['pdf_pages_read'], [2])
+            self.assertEqual(metrics['pdf_pages_total'], 2)
+            self.assertEqual(thinking, '')
+            self.assertEqual(len(errors), 3)
+            tool['data']['isError'] = True
+            trace.write_text(json.dumps(tool) + '\n')
+            metrics, _, errors = pipeline.audit_trajectory(trace, pdf, True, False)
+            self.assertEqual(metrics['pdf_pages_read'], [])
+            self.assertEqual(len(errors), 1)
+
+
 if __name__ == '__main__':
     unittest.main()

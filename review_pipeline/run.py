@@ -4,7 +4,9 @@ import json
 import os
 import subprocess
 import sys
+import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -27,7 +29,59 @@ def fingerprint(paths, configuration):
     return digest.hexdigest()
 
 
+def audit_trajectory(path, pdf, require_full_pdf=False, require_thinking=False):
+    pages_seen = set()
+    reported_totals = set()
+    thinking = []
+    last_stop = None
+    for line in path.read_text(encoding='utf-8').splitlines():
+        event = json.loads(line)
+        data = event.get('data', {})
+        if event.get('type') == 'message_end':
+            message = data.get('message', {})
+            if message.get('role') == 'assistant':
+                last_stop = message.get('stopReason')
+                thinking.extend(block['thinking'] for block in message.get('content', [])
+                                if block.get('type') == 'thinking' and block.get('thinking', '').strip())
+        if (event.get('type') != 'tool_execution_end' or data.get('toolName') != 'read_pdf'
+                or data.get('isError')):
+            continue
+        for block in data.get('result', {}).get('content', []):
+            if block.get('type') != 'text':
+                continue
+            try:
+                result = json.loads(block.get('text', ''))
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(result, dict) or result.get('file') != 'paper.pdf':
+                continue
+            reported_totals.add(result.get('total_pages'))
+            pages_seen.update(page['page'] for page in result.get('pages', [])
+                              if isinstance(page.get('page'), int) and not page.get('truncated', False))
+    expected_pages = None
+    if require_full_pdf:
+        from pypdf import PdfReader
+        from pypdf.errors import PyPdfError
+        try:
+            expected_pages = len(PdfReader(pdf).pages)
+        except PyPdfError as error:
+            raise ValueError(f'Cannot count PDF pages: {error}') from error
+    metrics = {'pdf_pages_total': expected_pages, 'pdf_pages_read': sorted(pages_seen),
+               'pdf_reported_totals': sorted(value for value in reported_totals if isinstance(value, int)),
+               'thinking_characters': sum(map(len, thinking)), 'final_stop_reason': last_stop}
+    errors = []
+    if require_full_pdf and (not expected_pages or not set(range(1, expected_pages + 1)) <= pages_seen):
+        errors.append(f'Agent did not fully read every PDF page ({len(pages_seen)}/{expected_pages})')
+    if require_thinking and not thinking:
+        errors.append('Agent did not return nonempty thinking')
+    if (require_full_pdf or require_thinking) and last_stop == 'length':
+        errors.append('Final assistant response was truncated (stopReason=length)')
+    return metrics, '\n\n'.join(thinking), errors
+
+
 def run(args, runner=subprocess.run):
+    if args.shard_count < 1 or not 0 <= args.shard_index < args.shard_count:
+        raise ValueError('--shard-count must be positive and --shard-index must be in [0, shard-count)')
     if args.limit is not None and args.limit < 1:
         raise ValueError('--limit must be positive')
     if args.timeout <= 0:
@@ -42,14 +96,16 @@ def run(args, runner=subprocess.run):
         raise ValueError('Experiment task must contain {{human_reviews}}')
     folders = sorted((p for p in args.database.resolve(strict=True).iterdir()
                       if p.is_dir() and not p.is_symlink() and p.name.startswith('paper_')
-                      and p.name[6:].isdigit()), key=lambda p: int(p.name[6:]))
+                      and p.name[6:].isdigit() and int(p.name[6:]) > 0
+                      and (int(p.name[6:]) - 1) % args.shard_count == args.shard_index), key=lambda p: int(p.name[6:]))
     if not args.dry_run and not (os.environ.get('YDC_API_KEY') or os.environ.get('YOU_COM_API_KEY') or os.environ.get('BRAVE_SEARCH_API_KEY')):
         raise ValueError('YDC_API_KEY or BRAVE_SEARCH_API_KEY is required: this experiment must perform web search')
     args.output.mkdir(parents=True, exist_ok=True)
     counts = {'completed': 0, 'resumed': 0, 'missing_input': 0, 'failed': 0, 'ready': 0}
     attempted = 0
     configuration = {'provider': args.provider, 'model': args.model, 'thinking': args.thinking, 'agent_dir': str(args.agent_dir),
-                     'sdk_path': os.environ.get('PI_SDK_PATH')}
+                     'sdk_path': os.environ.get('PI_SDK_PATH'),
+                     'require_full_pdf': args.require_full_pdf, 'require_thinking': args.require_thinking}
     for folder in folders:
         destination = args.output / folder.name
         destination.mkdir(exist_ok=True)
@@ -78,6 +134,7 @@ def run(args, runner=subprocess.run):
         status = {'status': 'running', 'paper': str(folder), 'fingerprint': key,
                   'provider': args.provider, 'model': args.model, 'thinking': args.thinking}
         write_json(status_path, status)
+        started = time.monotonic()
         try:
             with pdf.open('rb') as source:
                 if source.read(5) != b'%PDF-':
@@ -113,12 +170,21 @@ def run(args, runner=subprocess.run):
                 raise ValueError('Agent did not successfully read the PDF and perform web search')
             if not pending.read_text(encoding='utf-8').strip():
                 raise ValueError('Agent returned an empty response')
+            if args.require_full_pdf or args.require_thinking:
+                metrics, thinking, errors = audit_trajectory(
+                    trajectory, pdf, args.require_full_pdf, args.require_thinking)
+                status['audit'] = metrics
+                if errors:
+                    raise ValueError('; '.join(errors))
+                (destination / 'thinking.txt').write_text(thinking + '\n', encoding='utf-8')
             pending.replace(response_path)
             status['status'] = 'completed'
+            status['completed_at'] = datetime.now(timezone.utc).isoformat()
             counts['completed'] += 1
         except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
             status.update(status='failed', error=str(error))
             counts['failed'] += 1
+        status['elapsed_seconds'] = round(time.monotonic() - started, 3)
         write_json(status_path, status)
         print(f"{folder.name}: {status['status']}", flush=True)
         write_json(args.output / 'summary.json', counts)
@@ -138,6 +204,10 @@ def parser():
     result.add_argument('--model')
     result.add_argument('--limit', type=int)
     result.add_argument('--timeout', type=int, default=900, help='Maximum seconds per paper')
+    result.add_argument('--shard-count', type=int, default=1)
+    result.add_argument('--shard-index', type=int, default=0)
+    result.add_argument('--require-full-pdf', action='store_true')
+    result.add_argument('--require-thinking', action='store_true')
     result.add_argument('--dry-run', action='store_true')
     return result
 
