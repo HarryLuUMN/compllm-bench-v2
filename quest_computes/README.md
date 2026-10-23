@@ -128,3 +128,9 @@ Server and batch logs are under the ignored `quest_computes/pi_runtime/<run>/`.
 The launcher cleans up its own four model servers when the batch ends or the
 step exits; the parent allocation remains intact. Failed papers remain marked
 failed and can be retried by resuming the batch.
+
+Token usage is recorded incrementally beside every trajectory as
+`<trace>.jsonl.tokens.json`. At each batch boundary,
+`review_pipeline/results/<run>/token_usage.json` aggregates all attempts,
+including interrupted ones with returned usage. Thinking is part of output
+tokens and is not added twice. No cost assumptions are applied.

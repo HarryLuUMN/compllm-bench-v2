@@ -48,4 +48,8 @@ failed=0
 for pid in "${pids[@]}"; do
   wait "$pid" || failed=1
 done
+"$PYTHON" review_pipeline/estimate_usage.py \
+  --results "review_pipeline/results/$run_id" \
+  --traces "trace_databases/paper_review/$run_id" \
+  --output "review_pipeline/results/$run_id/token_usage.json" > "$runtime/token_usage.log"
 exit "$failed"
