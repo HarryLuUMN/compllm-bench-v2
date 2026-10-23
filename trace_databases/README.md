@@ -83,3 +83,28 @@ Tests use the real installed pi SDK with a local simulated streaming server,
 including a tool-call round and a second model round. They verify full request
 capture, tool linkage/results, final output, incremental persistence, failure
 recording, credential-field redaction and exclusive trace creation.
+
+## Token usage
+
+Each new trajectory has an atomic `<trace>.jsonl.tokens.json` ledger, updated
+when a request starts and when the provider returns usage. It records input,
+output, cache-read and cache-write tokens per request and in total. Thinking is
+already included in output tokens; the reasoning field is a provider-reported
+subset, not an additional amount. Some providers do not report that split.
+Provider usage takes priority over the assistant-message fallback, so a call is
+counted once. Provider-only calls, such as compaction, are included when usage
+is exposed. Interrupted requests without returned usage cannot be counted;
+the recorded totals are a lower bound while requests are unfinished/unmetered.
+The ledger contains no pricing assumptions.
+
+Aggregate a run, including failed and interrupted attempts:
+
+```sh
+python3 review_pipeline/estimate_usage.py \
+  --results review_pipeline/results/quest_qwen38_27b_full_20261023 \
+  --traces trace_databases/paper_review/quest_qwen38_27b_full_20261023 \
+  --output review_pipeline/results/quest_qwen38_27b_full_20261023/token_usage.json
+```
+
+The report prefers the small ledgers and can recover usage from older JSONL
+traces that predate them. Model groups stay separate.

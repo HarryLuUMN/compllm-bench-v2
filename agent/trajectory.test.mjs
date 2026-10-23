@@ -145,3 +145,26 @@ test('Brave credential headers are redacted in recorded objects', async () => {
     assert.equal((await rows(trace.file))[1].data.headers['X-Subscription-Token'], '[REDACTED]');
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('token ledger reconciles provider usage without double-counting cached or thinking tokens', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'agent-token-'));
+  try {
+    const trace = new Trajectory({ root, folder: '/papers/paper_test', metadata: { requested_model: 'test' } });
+    trace.request = 1;
+    trace.record('provider_request', { payload: {} });
+    trace.record('provider_stream_event', { data: { usage: { prompt_tokens: 100,
+      completion_tokens: 30, prompt_tokens_details: { cached_tokens: 20 },
+      completion_tokens_details: { reasoning_tokens: 10 } } } });
+    trace.event({ type: 'message_end', message: { role: 'assistant', usage: {
+      input: 80, output: 30, cacheRead: 20, cacheWrite: 0, reasoning: 10, totalTokens: 130 } } });
+    trace.request = 2;
+    trace.record('provider_request', { payload: {} });
+    trace.record('provider_stream_event', { data: { usage: { prompt_tokens: 50, completion_tokens: 10 } } });
+    trace.record('run_end', { status: 'failed' });
+    const ledger = JSON.parse(await readFile(trace.file + '.tokens.json', 'utf8'));
+    assert.deepEqual(ledger.totals, { input: 130, output: 40, cacheRead: 20, cacheWrite: 0, reasoning: 10, totalTokens: 190 });
+    assert.equal(ledger.requests.length, 2);
+    assert.equal(ledger.requests_started, 2);
+    assert.equal(ledger.status, 'failed');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
