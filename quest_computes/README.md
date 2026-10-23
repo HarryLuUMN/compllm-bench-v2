@@ -134,3 +134,10 @@ Token usage is recorded incrementally beside every trajectory as
 `review_pipeline/results/<run>/token_usage.json` aggregates all attempts,
 including interrupted ones with returned usage. Thinking is part of output
 tokens and is not added twice. No cost assumptions are applied.
+
+If local PDF upload is interrupted, `full_review/fetch_remote.py` can restore
+missing PDFs directly on Quest using the exact source URLs and checksums already
+recorded in `paper_database/manifest.json`. It uses eight download threads and
+atomic writes, and leaves valid existing PDFs intact. Transfer the much smaller
+metadata/human-review files separately; the same dataset verifier releases the
+full batch only when every expected input is present and verified.
