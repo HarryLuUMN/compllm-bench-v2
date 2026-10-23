@@ -10,6 +10,8 @@ source quest_computes/pi_runtime/search.env
 run_id=${REVIEW_RUN_ID:-quest_qwen38_27b_full_20261023}
 runtime="$repo_root/quest_computes/pi_runtime/$run_id"
 mkdir -p "$runtime"
+exec 9>"$runtime/batch.lock"
+flock 9
 "$PYTHON" - "$runtime" <<'PY'
 import json
 import sys

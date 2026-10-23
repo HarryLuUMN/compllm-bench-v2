@@ -141,3 +141,9 @@ recorded in `paper_database/manifest.json`. It uses eight download threads and
 atomic writes, and leaves valid existing PDFs intact. Transfer the much smaller
 metadata/human-review files separately; the same dataset verifier releases the
 full batch only when every expected input is present and verified.
+
+Batch invocations acquire a per-run lock, so a manual full-batch start and
+the waiting controller cannot process the same papers concurrently. When
+verified PDFs are already far ahead of the review workers and all metadata/reviews
+are present, `run_batch.sh` may process them while the remaining source downloads
+continue. The waiting controller resumes matching completed papers afterward.
