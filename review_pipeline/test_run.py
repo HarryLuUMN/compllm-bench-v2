@@ -50,6 +50,24 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(len(list((args.trace_root / 'paper_0001').glob('*.jsonl'))), 2)
 
     @patch.dict(os.environ, {'YDC_API_KEY': 'test-only'})
+    def test_model_configuration_changes_invalidate_resume(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            args = self.setup_run(root)
+            args.limit = 1
+            args.agent_dir = root / 'agent'
+            args.agent_dir.mkdir()
+            models = args.agent_dir / 'models.json'
+            models.write_text('{"endpoint":"first"}')
+            self.assertEqual(pipeline.run(args, self.fake_agent)['completed'], 1)
+            args.limit = None
+            self.assertEqual(pipeline.run(args, self.fake_agent)['resumed'], 1)
+            models.write_text('{"endpoint":"second"}')
+            self.assertEqual(pipeline.run(args, self.fake_agent)['completed'], 2)
+            models.unlink()
+            self.assertEqual(pipeline.run(args, self.fake_agent)['completed'], 2)
+
+    @patch.dict(os.environ, {'YDC_API_KEY': 'test-only'})
     def test_missing_pdf_and_failed_agent_are_not_completed(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = self.setup_run(Path(tmp))

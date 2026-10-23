@@ -116,8 +116,13 @@ def run(args, runner=subprocess.run):
             counts['missing_input'] += 1
             write_json(status_path, {'status': 'missing_input', 'paper': str(folder)})
             continue
-        key = fingerprint([pdf, reviews_path, prompt_path, ROOT / 'agent/run.mjs',
-                           ROOT / 'agent/tools.mjs', ROOT / 'agent/pdf_reader.py', ROOT / 'agent/trajectory.mjs', Path(__file__)], configuration)
+        fingerprint_paths = [pdf, reviews_path, prompt_path, ROOT / 'agent/run.mjs',
+                             ROOT / 'agent/tools.mjs', ROOT / 'agent/pdf_reader.py',
+                             ROOT / 'agent/trajectory.mjs', Path(__file__)]
+        models_path = args.agent_dir / 'models.json'
+        if models_path.is_file():
+            fingerprint_paths.append(models_path)
+        key = fingerprint(fingerprint_paths, configuration)
         response_path = destination / 'response.txt'
         previous = json.loads(status_path.read_text()) if status_path.exists() else {}
         if (previous.get('status') == 'completed' and previous.get('fingerprint') == key
