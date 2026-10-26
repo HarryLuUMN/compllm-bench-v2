@@ -1,0 +1,13 @@
+{
+  "counts": {
+    "papers": 5024
+  },
+  "snapshot": "Public paper and official peer review corpus",
+  "journals": {
+    "BMC Medicine": 1389,
+    "BMJ Open": 504,
+    "eLife": 1389,
+    "PLOS Medicine": 528,
+    "PLOS ONE": 1214
+  }
+}

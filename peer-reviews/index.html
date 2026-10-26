@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper and Peer Review Browser</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <p class="eyebrow">Human–AI Complementarity</p>
+          <h1>Peer Review Browser</h1>
+        </div>
+
+        <section class="summary-grid" aria-label="Dataset summary">
+          <div>
+            <span id="totalRecords">0</span>
+            <p>Records</p>
+          </div>
+          <div>
+            <span id="visibleRecords">0</span>
+            <p>Visible</p>
+          </div>
+          <div>
+            <span id="reviewCoverage">0%</span>
+            <p>Reviews</p>
+          </div>
+          <div>
+            <span id="yearRange">-</span>
+            <p>Years</p>
+          </div>
+        </section>
+
+        <form id="filters" class="filters">
+          <label>
+            <span>Search</span>
+            <input id="searchInput" type="search" placeholder="Title, DOI, abstract, review summary" />
+          </label>
+
+          <label>
+            <span>Journal</span>
+            <select id="journalSelect"></select>
+          </label>
+
+          <label>
+            <span>Year</span>
+            <select id="yearSelect"></select>
+          </label>
+
+          <label>
+            <span>Sort</span>
+            <select id="sortSelect">
+              <option value="date-desc">Newest first</option>
+              <option value="date-asc">Oldest first</option>
+              <option value="journal">Journal, year</option>
+              <option value="title">Title</option>
+            </select>
+          </label>
+
+          <div class="filter-actions">
+            <button type="button" id="clearFilters">Clear</button>
+            <button type="button" id="exportFiltered">Export</button>
+          </div>
+        </form>
+
+        <section class="manifest-panel" aria-label="Collection manifest">
+          <h2>Published snapshot</h2>
+          <dl>
+            <div>
+              <dt>Papers</dt>
+              <dd id="candidateCount">-</dd>
+            </div>
+            <div>
+              <dt>Journals</dt>
+              <dd id="rejectedCount">-</dd>
+            </div>
+            <div>
+              <dt>Details</dt>
+              <dd id="validationStatus">-</dd>
+            </div>
+          </dl>
+        </section>
+      </aside>
+
+      <main class="content">
+        <section class="record-list-section">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Records</p>
+              <h2 id="resultHeading">Loaded records</h2>
+            </div>
+            <div class="pager">
+              <button id="prevPage" type="button" aria-label="Previous page">&lt;</button>
+              <span id="pageStatus">1 / 1</span>
+              <button id="nextPage" type="button" aria-label="Next page">&gt;</button>
+            </div>
+          </div>
+          <div id="recordList" class="record-list" aria-live="polite"></div>
+        </section>
+
+        <section class="detail-section">
+          <div id="emptyDetail" class="empty-state">
+            <h2>No record selected</h2>
+            <p>Select a record to inspect metadata, abstract, official reviews, and full text.</p>
+          </div>
+
+          <article id="recordDetail" class="record-detail" hidden>
+            <div class="detail-head">
+              <div>
+                <p id="detailJournal" class="eyebrow"></p>
+                <h2 id="detailTitle"></h2>
+                <p id="detailMeta" class="detail-meta"></p>
+              </div>
+              <div class="detail-actions">
+                <a id="doiLink" href="#" target="_blank" rel="noreferrer">DOI</a>
+                <a id="reviewLink" href="#" target="_blank" rel="noreferrer">Review</a>
+                <a id="fullTextLink" href="#" target="_blank" rel="noreferrer">Full text</a>
+              </div>
+            </div>
+
+            <div class="tab-bar" role="tablist" aria-label="Record sections">
+              <button class="tab-button active" type="button" data-tab="abstract">Abstract</button>
+              <button class="tab-button" type="button" data-tab="review">Official Review</button>
+              <button class="tab-button" type="button" data-tab="fulltext">Full Text</button>
+              <button class="tab-button" type="button" data-tab="metadata">Metadata</button>
+            </div>
+
+            <div class="tab-content">
+              <section id="tab-abstract" class="tab-panel active"></section>
+              <section id="tab-review" class="tab-panel"></section>
+              <section id="tab-fulltext" class="tab-panel"></section>
+              <section id="tab-metadata" class="tab-panel"></section>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
+
