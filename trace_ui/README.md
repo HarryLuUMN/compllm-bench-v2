@@ -20,6 +20,24 @@ Treat traces as sensitive experiment data, including prompts and returned thinki
 
 Tests: `python3 -m unittest discover -s trace_ui -p 'test_*.py'`.
 
+## Live Quest traces
+
+From the repository root, keep this connection running:
+
+```sh
+bash quest_computes/trace_viewer/connect.sh
+```
+
+Open http://127.0.0.1:8766. This runs the viewer on Quest and forwards it through
+SSH, reading original trajectories on demand without downloading the dataset.
+Follow streams appended events from active runs. The default experiment is
+`quest_qwen38_27b_medium_full_20261023`; pass another experiment name as the first
+argument. Set `TRACE_LOCAL_PORT` or `TRACE_REMOTE_PORT` to use different ports.
+Both endpoints bind to localhost. Closing the connection stops the remote viewer;
+the review experiment continues independently. Re-run the command to reconnect.
+The connection requires the existing Quest SSH key and remote Python runtime.
+It copies only the viewer's four source assets, without modifying any traces.
+
 ## GitHub Pages
 
 The hosted viewer uses published snapshots. Export only the experiment directory
