@@ -34,7 +34,9 @@ def audit_trajectory(path, pdf, require_full_pdf=False, require_thinking=False):
     reported_totals = set()
     thinking = []
     last_stop = None
-    for line in path.read_text(encoding='utf-8').splitlines():
+    for line in path.read_text(encoding='utf-8').split('\n'):
+        if not line.strip():
+            continue
         event = json.loads(line)
         data = event.get('data', {})
         if event.get('type') == 'message_end':

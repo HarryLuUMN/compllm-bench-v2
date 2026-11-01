@@ -163,6 +163,21 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(status['audit']['pdf_pages_read'], [1, 2])
             self.assertEqual((result / 'thinking.txt').read_text().strip(), 'Check the evidence.')
 
+    def test_audit_preserves_unicode_line_separators_in_json_strings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            trace = Path(tmp) / 'trace.jsonl'
+            text = 'Evidence\u2028with\u2029Unicode\x85separators'
+            event = {'type': 'message_end', 'data': {'message': {'role': 'assistant',
+                     'stopReason': 'stop', 'content': [{'type': 'thinking', 'thinking': text}]}}}
+            trace.write_text(json.dumps(event, ensure_ascii=False) + '\n', encoding='utf-8')
+            metrics, thinking, errors = pipeline.audit_trajectory(trace, Path(tmp) / 'paper.pdf', False, True)
+            self.assertEqual(thinking, text)
+            self.assertEqual(metrics['thinking_characters'], len(text))
+            self.assertEqual(errors, [])
+            trace.write_text('{"type": "broken\n', encoding='utf-8')
+            with self.assertRaises(json.JSONDecodeError):
+                pipeline.audit_trajectory(trace, Path(tmp) / 'paper.pdf')
+
     def test_audit_rejects_incomplete_truncated_and_missing_thinking(self):
         from pypdf import PdfWriter
         with tempfile.TemporaryDirectory() as tmp:
