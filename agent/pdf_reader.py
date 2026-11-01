@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 from pathlib import Path
 
 
@@ -43,4 +44,11 @@ if __name__ == '__main__':
     else:
         if not args.root:
             parser.error('--root is required for PDF reading')
+        if budget := os.environ.get('PDF_STREAM_PARSING_BUDGET'):
+            from pypdf import overwrite_configuration
+
+            budget = int(budget)
+            if not 2_000_000 <= budget <= 8_000_000:
+                parser.error('PDF_STREAM_PARSING_BUDGET must be between 2000000 and 8000000')
+            overwrite_configuration(stream_parsing_work_maximum_count=budget)
         print(json.dumps(read_pdf(args.root, args.path, args.start, args.end), ensure_ascii=False))

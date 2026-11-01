@@ -35,6 +35,10 @@ for shard in range(8):
     (directory / 'models.json').write_text(json.dumps(config, indent=2) + '\n')
 PY
 pids=()
+selection=()
+if [[ -n "${REVIEW_PAPER_LIST:-}" ]]; then
+  selection=(--paper-list "$REVIEW_PAPER_LIST")
+fi
 for shard in 0 1 2 3 4 5 6 7; do
   "$PYTHON" review_pipeline/run.py --database paper_database \
     --provider quest-review --model qwen38-27b-review --thinking medium \
@@ -42,7 +46,7 @@ for shard in 0 1 2 3 4 5 6 7; do
     --shard-count 8 --shard-index "$shard" --require-full-pdf --require-thinking \
     --prompt prompts/full_paper_review.yaml \
     --trace-root "trace_databases/paper_review/$run_id" \
-    --output "review_pipeline/results/$run_id/shard_$shard" "$@" \
+    --output "review_pipeline/results/$run_id/shard_$shard" "${selection[@]}" "$@" \
     > "$runtime/batch_$shard.log" 2>&1 &
   pids+=("$!")
 done

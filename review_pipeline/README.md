@@ -67,3 +67,17 @@ for the successful-tool-use gate. See [trajectory details](../trace_databases/RE
 `--thinking off|low|medium|high` is forwarded to the agent and included in the
 resume fingerprint and per-paper status. The Quest pilot enables `high`; its
 model-serving and harness settings live under `quest_computes/`.
+# Targeted retries
+
+Use `--paper-list retry.json` with a nonempty JSON array such as
+`["paper_0017", "paper_0235"]` to restrict processing, including when code or
+configuration changes invalidate fingerprints. Unlisted results are untouched.
+Quest's batch launcher accepts the same selection through `REVIEW_PAPER_LIST`.
+
+For vector-heavy PDFs that exceed pypdf's content-stream parsing budget, set
+`PDF_STREAM_PARSING_BUDGET=8000000` on a targeted retry. This opt-in setting uses
+the installed pypdf configuration API (Quest uses 6.21.2), caps the budget at
+eight million parsing operations, and retains the PDF tool's timeout and output
+limits. These operations are PDF parser work, not LLM tokens. Full-page coverage
+and all other experiment acceptance checks remain required. Archive previous
+attempt artifacts before retrying; JSONL trajectories remain distinct per attempt.

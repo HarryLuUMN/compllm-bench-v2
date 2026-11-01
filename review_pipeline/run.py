@@ -100,6 +100,14 @@ def run(args, runner=subprocess.run):
                       if p.is_dir() and not p.is_symlink() and p.name.startswith('paper_')
                       and p.name[6:].isdigit() and int(p.name[6:]) > 0
                       and (int(p.name[6:]) - 1) % args.shard_count == args.shard_index), key=lambda p: int(p.name[6:]))
+    if args.paper_list:
+        selected = json.loads(args.paper_list.read_text(encoding='utf-8'))
+        if not isinstance(selected, list) or not selected or any(
+                not isinstance(name, str) or not name.startswith('paper_') or not name[6:].isdigit()
+                for name in selected):
+            raise ValueError('--paper-list must contain a nonempty JSON array of paper folder names')
+        selected = set(selected)
+        folders = [folder for folder in folders if folder.name in selected]
     if not args.dry_run and not (os.environ.get('YDC_API_KEY') or os.environ.get('YOU_COM_API_KEY') or os.environ.get('BRAVE_SEARCH_API_KEY')):
         raise ValueError('YDC_API_KEY or BRAVE_SEARCH_API_KEY is required: this experiment must perform web search')
     args.output.mkdir(parents=True, exist_ok=True)
@@ -107,6 +115,7 @@ def run(args, runner=subprocess.run):
     attempted = 0
     configuration = {'provider': args.provider, 'model': args.model, 'thinking': args.thinking, 'agent_dir': str(args.agent_dir),
                      'sdk_path': os.environ.get('PI_SDK_PATH'),
+                     'pdf_stream_parsing_budget': os.environ.get('PDF_STREAM_PARSING_BUDGET'),
                      'require_full_pdf': args.require_full_pdf, 'require_thinking': args.require_thinking}
     for folder in folders:
         destination = args.output / folder.name
@@ -210,6 +219,7 @@ def parser():
     result.add_argument('--provider')
     result.add_argument('--model')
     result.add_argument('--limit', type=int)
+    result.add_argument('--paper-list', type=Path, help='JSON array restricting processing to listed paper folders')
     result.add_argument('--timeout', type=int, default=900, help='Maximum seconds per paper')
     result.add_argument('--shard-count', type=int, default=1)
     result.add_argument('--shard-index', type=int, default=0)

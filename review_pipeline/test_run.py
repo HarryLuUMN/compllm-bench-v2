@@ -50,6 +50,23 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(len(list((args.trace_root / 'paper_0001').glob('*.jsonl'))), 2)
 
     @patch.dict(os.environ, {'YDC_API_KEY': 'test-only'})
+    def test_explicit_retry_selection_preserves_unselected_success(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            args = self.setup_run(root)
+            self.assertEqual(pipeline.run(args, self.fake_agent)['completed'], 2)
+            original = (args.output / 'paper_0001/status.json').read_bytes()
+            args.paper_list = root / 'retry.json'
+            args.paper_list.write_text('["paper_0002"]')
+            with patch.dict(os.environ, {'PDF_STREAM_PARSING_BUDGET': '8000000'}):
+                self.assertEqual(pipeline.run(args, self.fake_agent)['completed'], 1)
+            self.assertEqual((args.output / 'paper_0001/status.json').read_bytes(), original)
+            self.assertEqual(len(list((args.trace_root / 'paper_0001').glob('*.jsonl'))), 1)
+            args.paper_list.write_text('[]')
+            with self.assertRaisesRegex(ValueError, 'paper-list'):
+                pipeline.run(args, self.fake_agent)
+
+    @patch.dict(os.environ, {'YDC_API_KEY': 'test-only'})
     def test_model_configuration_changes_invalidate_resume(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
