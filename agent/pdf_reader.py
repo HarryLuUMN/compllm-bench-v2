@@ -1,16 +1,19 @@
 import argparse
 import json
 import os
+import subprocess
 from pathlib import Path
 
 
-def read_pdf(root, filename, start_page=1, end_page=None):
+def read_pdf(root, filename, start_page=1, end_page=None, backend='pypdf'):
     from pypdf import PdfReader
 
     root = Path(root).resolve(strict=True)
     path = (root / filename).resolve(strict=True)
     if not path.is_relative_to(root) or path.suffix.lower() != '.pdf':
         raise ValueError('PDF must be inside the selected folder')
+    if backend not in ('pypdf', 'pdftotext'):
+        raise ValueError('PDF_TEXT_BACKEND must be pypdf or pdftotext')
     reader = PdfReader(path)
     end_page = min(start_page + 4, len(reader.pages)) if end_page is None else end_page
     if not 1 <= start_page <= end_page <= len(reader.pages) or end_page - start_page >= 10:
@@ -18,11 +21,19 @@ def read_pdf(root, filename, start_page=1, end_page=None):
     pages = []
     remaining = 60000
     for number in range(start_page, end_page + 1):
-        text = reader.pages[number - 1].extract_text() or ''
+        if backend == 'pdftotext':
+            extracted = subprocess.run(['pdftotext', '-f', str(number), '-l', str(number),
+                                        '-enc', 'UTF-8', str(path), '-'],
+                                       capture_output=True, text=True, encoding='utf-8',
+                                       timeout=45, check=True)
+            text = extracted.stdout.rstrip('\f')
+        else:
+            text = reader.pages[number - 1].extract_text() or ''
         excerpt = text[:remaining]
         pages.append({'page': number, 'text': excerpt, 'truncated': len(excerpt) < len(text)})
         remaining -= len(excerpt)
     return {'file': str(path.relative_to(root)), 'total_pages': len(reader.pages), 'pages': pages,
+            'extraction_backend': backend,
             'note': 'Text extraction only; scanned pages may require OCR. Figures are not interpreted.'}
 
 
@@ -51,4 +62,5 @@ if __name__ == '__main__':
             if not 2_000_000 <= budget <= 8_000_000:
                 parser.error('PDF_STREAM_PARSING_BUDGET must be between 2000000 and 8000000')
             overwrite_configuration(stream_parsing_work_maximum_count=budget)
-        print(json.dumps(read_pdf(args.root, args.path, args.start, args.end), ensure_ascii=False))
+        print(json.dumps(read_pdf(args.root, args.path, args.start, args.end,
+                                  os.environ.get('PDF_TEXT_BACKEND', 'pypdf')), ensure_ascii=False))

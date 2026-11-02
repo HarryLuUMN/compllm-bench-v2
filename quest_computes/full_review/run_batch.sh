@@ -3,6 +3,9 @@ set -euo pipefail
 : "${SLURM_JOB_ID:?Run inside a Slurm allocation}"
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$repo_root"
+if [[ "${PDF_TEXT_BACKEND:-pypdf}" == pdftotext ]]; then
+  module load libpng12/1.2.57-gcc-4.8.5 poppler/0.48
+fi
 export PATH="$repo_root/quest_computes/pi_runtime/node-v22.22.0-linux-x64/bin:$PATH"
 export PYTHON="$repo_root/quest_computes/pi_runtime/python/bin/python"
 export PI_SDK_PATH="$repo_root/quest_computes/pi_runtime/node_modules/@earendil-works/pi-coding-agent/dist/index.js"

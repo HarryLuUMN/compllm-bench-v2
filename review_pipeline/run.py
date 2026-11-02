@@ -116,6 +116,7 @@ def run(args, runner=subprocess.run):
     configuration = {'provider': args.provider, 'model': args.model, 'thinking': args.thinking, 'agent_dir': str(args.agent_dir),
                      'sdk_path': os.environ.get('PI_SDK_PATH'),
                      'pdf_stream_parsing_budget': os.environ.get('PDF_STREAM_PARSING_BUDGET'),
+                     'pdf_text_backend': os.environ.get('PDF_TEXT_BACKEND', 'pypdf'),
                      'require_full_pdf': args.require_full_pdf, 'require_thinking': args.require_thinking}
     for folder in folders:
         destination = args.output / folder.name

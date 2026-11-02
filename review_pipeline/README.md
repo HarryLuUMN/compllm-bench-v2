@@ -69,6 +69,12 @@ resume fingerprint and per-paper status. The Quest pilot enables `high`; its
 model-serving and harness settings live under `quest_computes/`.
 # Targeted retries
 
+`PDF_TEXT_BACKEND=pdftotext` selects the existing Quest Poppler module for
+complex PDFs. Each returned page records its extraction backend. Page numbers,
+character limits, truncation flags and the strict full-page audit remain in
+effect. This backend is optional and requires an already installed `pdftotext`;
+the Quest launcher loads its Poppler and libpng modules without installing packages.
+
 Use `--paper-list retry.json` with a nonempty JSON array such as
 `["paper_0017", "paper_0235"]` to restrict processing, including when code or
 configuration changes invalidate fingerprints. Unlisted results are untouched.
