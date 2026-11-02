@@ -42,12 +42,15 @@ selection=()
 if [[ -n "${REVIEW_PAPER_LIST:-}" ]]; then
   selection=(--paper-list "$REVIEW_PAPER_LIST")
 fi
+if [[ "${REVIEW_STAGED_EVIDENCE:-0}" == 1 ]]; then
+  selection+=(--staged-evidence)
+fi
 for shard in 0 1 2 3 4 5 6 7; do
   "$PYTHON" review_pipeline/run.py --database paper_database \
     --provider quest-review --model qwen38-27b-review --thinking medium \
-    --agent-dir "$runtime/agent_$shard" --timeout 3600 \
+    --agent-dir "$runtime/agent_$shard" --timeout "${REVIEW_PAPER_TIMEOUT:-3600}" \
     --shard-count 8 --shard-index "$shard" --require-full-pdf --require-thinking \
-    --prompt prompts/full_paper_review.yaml \
+    --prompt "${REVIEW_PROMPT:-prompts/full_paper_review.yaml}" \
     --trace-root "trace_databases/paper_review/$run_id" \
     --output "review_pipeline/results/$run_id/shard_$shard" "${selection[@]}" "$@" \
     > "$runtime/batch_$shard.log" 2>&1 &

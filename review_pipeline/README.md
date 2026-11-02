@@ -69,6 +69,22 @@ resume fingerprint and per-paper status. The Quest pilot enables `high`; its
 model-serving and harness settings live under `quest_computes/`.
 # Targeted retries
 
+For context overflow, omitted pages, or thinking-only length stops, use
+`--staged-evidence --prompt prompts/repair_paper_review.yaml` together with an
+explicit `--paper-list`. This repair mode sends the entire review JSON and all
+PDF pages through bounded evidence inputs before the audit. It keeps short notes
+and compacts context proactively; original evidence, intermediate thinking, actual
+PDF tool executions and compaction calls remain in the trajectory. Continuation is
+limited to three attempts per stage. Acceptance additionally requires gap-free,
+hash-matched review ingestion and every PDF page ingested by the model.
+
+On Quest set `REVIEW_STAGED_EVIDENCE=1`,
+`REVIEW_PROMPT=prompts/repair_paper_review.yaml`, `REVIEW_PAPER_LIST` and optionally
+`REVIEW_PAPER_TIMEOUT=7200`. Keep `PDF_TEXT_BACKEND=pdftotext` for complex PDFs.
+These repair attempts are methodologically distinct from the original single-task
+agent run; their prompt, configuration, ingestion and compaction records identify
+the difference. Successful original papers remain untouched.
+
 `PDF_TEXT_BACKEND=pdftotext` selects the existing Quest Poppler module for
 complex PDFs. Each returned page records its extraction backend. Page numbers,
 character limits, truncation flags and the strict full-page audit remain in

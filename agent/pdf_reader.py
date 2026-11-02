@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 
 
-def read_pdf(root, filename, start_page=1, end_page=None, backend='pypdf'):
+def read_pdf(root, filename, start_page=1, end_page=None, backend='pypdf', max_characters=60000):
     from pypdf import PdfReader
 
     root = Path(root).resolve(strict=True)
@@ -14,12 +14,14 @@ def read_pdf(root, filename, start_page=1, end_page=None, backend='pypdf'):
         raise ValueError('PDF must be inside the selected folder')
     if backend not in ('pypdf', 'pdftotext'):
         raise ValueError('PDF_TEXT_BACKEND must be pypdf or pdftotext')
+    if not 1 <= max_characters <= 240000:
+        raise ValueError('Character budget must be between 1 and 240000')
     reader = PdfReader(path)
     end_page = min(start_page + 4, len(reader.pages)) if end_page is None else end_page
     if not 1 <= start_page <= end_page <= len(reader.pages) or end_page - start_page >= 10:
         raise ValueError(f'PDF has {len(reader.pages)} pages. Choose an inclusive range of at most 10 pages, numbered from 1.')
     pages = []
-    remaining = 60000
+    remaining = max_characters
     for number in range(start_page, end_page + 1):
         if backend == 'pdftotext':
             extracted = subprocess.run(['pdftotext', '-f', str(number), '-l', str(number),
@@ -44,6 +46,7 @@ if __name__ == '__main__':
     parser.add_argument('--root')
     parser.add_argument('--start', type=int, default=1)
     parser.add_argument('--end', type=int)
+    parser.add_argument('--characters', type=int, default=60000)
     args = parser.parse_args()
     if args.mode == 'prompt':
         import yaml
@@ -63,4 +66,4 @@ if __name__ == '__main__':
                 parser.error('PDF_STREAM_PARSING_BUDGET must be between 2000000 and 8000000')
             overwrite_configuration(stream_parsing_work_maximum_count=budget)
         print(json.dumps(read_pdf(args.root, args.path, args.start, args.end,
-                                  os.environ.get('PDF_TEXT_BACKEND', 'pypdf')), ensure_ascii=False))
+                                  os.environ.get('PDF_TEXT_BACKEND', 'pypdf'), args.characters), ensure_ascii=False))

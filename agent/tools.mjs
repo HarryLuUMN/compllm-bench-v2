@@ -43,8 +43,9 @@ export async function createTools(folder, { fetchImpl = fetch, apiKey = process.
     {
       name: 'read_pdf', label: 'Read PDF pages',
       description: 'Extract local PDF text with page numbers. Read up to 10 pages per call; default 5. Cannot interpret figures or scanned images.',
-      parameters: object({ file: string, start_page: integer, end_page: integer }, ['file']),
-      async execute(_id, { file, start_page = 1, end_page }, signal) {
+      parameters: object({ file: string, start_page: integer, end_page: integer,
+        max_characters: { type: 'integer', minimum: 1, maximum: 240000 } }, ['file']),
+      async execute(_id, { file, start_page = 1, end_page, max_characters }, signal) {
         const path = await realpath(join(root, file));
         const rel = relative(root, path);
         if (isAbsolute(file) || rel === '..' || rel.startsWith('../') || isAbsolute(rel)) {
@@ -52,6 +53,7 @@ export async function createTools(folder, { fetchImpl = fetch, apiKey = process.
         }
         const args = ['pdf', rel, '--root', root, '--start', String(start_page)];
         if (end_page !== undefined) args.push('--end', String(end_page));
+        if (max_characters !== undefined) args.push('--characters', String(max_characters));
         return result(await python(args, signal));
       },
     },

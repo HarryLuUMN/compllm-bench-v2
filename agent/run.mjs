@@ -4,6 +4,7 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createTools, python } from './tools.mjs';
 import { Trajectory } from './trajectory.mjs';
+import { stagedReview } from './repair.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const { values } = parseArgs({ options: {
@@ -13,6 +14,7 @@ const { values } = parseArgs({ options: {
   'agent-dir': { type: 'string', default: resolve(here, '../../pi-agent/agent') },
   trajectory: { type: 'string' }, 'trace-root': { type: 'string', default: resolve(here, '../trace_databases/paper_review') },
   thinking: { type: 'string', default: 'off' },
+  'staged-evidence': { type: 'boolean' }, 'reviews-file': { type: 'string' },
   check: { type: 'boolean' }, help: { type: 'boolean' },
 } });
 if (values.help) {
@@ -48,9 +50,11 @@ try {
   const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager, ModelRuntime } = await loadSdk();
   const agentDir = resolve(values['agent-dir']);
   const runtime = await ModelRuntime.create({ authPath: join(agentDir, 'auth.json'), modelsPath: join(agentDir, 'models.json') });
-  const model = values.model ? runtime.getModel(values.provider, values.model) : undefined;
+  let model = values.model ? runtime.getModel(values.provider, values.model) : undefined;
   if (values.model && !model) throw new Error(`Unknown model: ${values.provider}/${values.model}`);
-  const settings = SettingsManager.inMemory();
+  if (values['staged-evidence'] && model) model = { ...model, contextWindow: 98304 };
+  const settings = SettingsManager.inMemory(values['staged-evidence']
+    ? { compaction: { enabled: true, reserveTokens: 32768, keepRecentTokens: 12000 } } : {});
   const loader = new DefaultResourceLoader({ cwd: resolve(values.folder), agentDir, settingsManager: settings,
     noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
     extensionFactories: [trajectory.extension()],
@@ -72,7 +76,12 @@ try {
     if (event.type === 'tool_execution_start') console.error(`[tool] ${event.toolName}`);
     if (event.type === 'tool_execution_end') trace.push({ tool: event.toolName, success: !event.isError });
   });
-  await session.prompt(question);
+  if (values['staged-evidence']) {
+    if (!values['reviews-file']) throw new Error('--reviews-file is required for staged evidence');
+    trajectory.record('repair_mode', { mode: 'staged_evidence', soft_context_window: 98304 });
+    await stagedReview({ session, tools, trajectory, trace, prompt, question,
+      reviewsFile: resolve(values['reviews-file']) });
+  } else await session.prompt(question);
   const last = session.messages.filter(message => message.role === 'assistant').at(-1);
   if (last?.stopReason === 'error' || last?.stopReason === 'aborted') {
     throw new Error(last.errorMessage || `Model stopped: ${last.stopReason}`);

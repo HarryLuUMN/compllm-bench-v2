@@ -195,6 +195,38 @@ class PipelineTests(unittest.TestCase):
             with self.assertRaises(json.JSONDecodeError):
                 pipeline.audit_trajectory(trace, Path(tmp) / 'paper.pdf')
 
+    def test_staged_audit_requires_complete_review_spans_and_ingested_pdf_pages(self):
+        from pypdf import PdfWriter
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pdf, reviews, trace = root / 'paper.pdf', root / 'reviews.json', root / 'trace.jsonl'
+            writer = PdfWriter()
+            writer.add_blank_page(width=100, height=100)
+            writer.write(pdf)
+            text = '{"review":"A😀B\u2028C"}'
+            reviews.write_text(text, encoding='utf-8')
+            digest = pipeline.hashlib.sha256(text.encode()).hexdigest()
+            rows = [
+                {'type': 'review_chunk_read', 'data': {'start': 0, 'end': 8, 'total': len(text), 'sha256': digest}},
+                {'type': 'review_chunk_read', 'data': {'start': 8, 'end': len(text), 'total': len(text), 'sha256': digest}},
+                {'type': 'pdf_page_ingested', 'data': {'page': 1}},
+                {'type': 'tool_execution_end', 'data': {'toolName': 'read_pdf', 'result': {'content': [
+                    {'type': 'text', 'text': json.dumps({'file': 'paper.pdf', 'total_pages': 1,
+                     'pages': [{'page': 1, 'truncated': False}]})}]}}},
+                {'type': 'message_end', 'data': {'message': {'role': 'assistant', 'stopReason': 'stop',
+                 'content': [{'type': 'thinking', 'thinking': 'Evidence checked.'}]}}}]
+            def audit(events):
+                trace.write_text(''.join(json.dumps(row) + '\n' for row in events))
+                return pipeline.audit_trajectory(trace, pdf, True, True, reviews)
+            metrics, _, errors = audit(rows)
+            self.assertEqual(errors, [])
+            self.assertEqual(metrics['review_characters_read'], len(text))
+            self.assertTrue(audit(rows[1:])[2])
+            self.assertTrue(audit([row for row in rows if row['type'] != 'pdf_page_ingested'])[2])
+            rows[0]['data']['sha256'] = 'wrong source'
+            with self.assertRaisesRegex(ValueError, 'provenance'):
+                audit(rows)
+
     def test_audit_rejects_incomplete_truncated_and_missing_thinking(self):
         from pypdf import PdfWriter
         with tempfile.TemporaryDirectory() as tmp:

@@ -29,16 +29,30 @@ def fingerprint(paths, configuration):
     return digest.hexdigest()
 
 
-def audit_trajectory(path, pdf, require_full_pdf=False, require_thinking=False):
+def audit_trajectory(path, pdf, require_full_pdf=False, require_thinking=False, reviews=None):
     pages_seen = set()
     reported_totals = set()
     thinking = []
     last_stop = None
+    review_spans = []
+    ingested_pages = set()
+    if reviews:
+        review_text = reviews.read_text(encoding='utf-8')
+        review_digest = hashlib.sha256(review_text.encode()).hexdigest()
     for line in path.read_text(encoding='utf-8').split('\n'):
         if not line.strip():
             continue
         event = json.loads(line)
         data = event.get('data', {})
+        if reviews and event.get('type') == 'review_chunk_read':
+            start, end = data.get('start'), data.get('end')
+            if (data.get('sha256') != review_digest or data.get('total') != len(review_text)
+                    or not isinstance(start, int) or not isinstance(end, int)
+                    or not 0 <= start < end <= len(review_text)):
+                raise ValueError('Invalid human review chunk provenance')
+            review_spans.append((start, end))
+        if event.get('type') == 'pdf_page_ingested':
+            ingested_pages.add(data.get('page'))
         if event.get('type') == 'message_end':
             message = data.get('message', {})
             if message.get('role') == 'assistant':
@@ -72,6 +86,19 @@ def audit_trajectory(path, pdf, require_full_pdf=False, require_thinking=False):
                'pdf_reported_totals': sorted(value for value in reported_totals if isinstance(value, int)),
                'thinking_characters': sum(map(len, thinking)), 'final_stop_reason': last_stop}
     errors = []
+    if reviews:
+        read_through = 0
+        for start, end in sorted(review_spans):
+            if start > read_through:
+                break
+            read_through = max(read_through, end)
+        metrics['review_characters_read'] = read_through
+        metrics['review_characters_total'] = len(review_text)
+        metrics['pdf_pages_ingested'] = sorted(ingested_pages)
+        if read_through != len(review_text):
+            errors.append('Staged agent did not ingest every human review chunk')
+        if expected_pages and not set(range(1, expected_pages + 1)) <= ingested_pages:
+            errors.append('Staged agent did not ingest every PDF page')
     if require_full_pdf and (not expected_pages or not set(range(1, expected_pages + 1)) <= pages_seen):
         errors.append(f'Agent did not fully read every PDF page ({len(pages_seen)}/{expected_pages})')
     if require_thinking and not thinking:
@@ -117,6 +144,7 @@ def run(args, runner=subprocess.run):
                      'sdk_path': os.environ.get('PI_SDK_PATH'),
                      'pdf_stream_parsing_budget': os.environ.get('PDF_STREAM_PARSING_BUDGET'),
                      'pdf_text_backend': os.environ.get('PDF_TEXT_BACKEND', 'pypdf'),
+                     'staged_evidence': args.staged_evidence,
                      'require_full_pdf': args.require_full_pdf, 'require_thinking': args.require_thinking}
     for folder in folders:
         destination = args.output / folder.name
@@ -128,7 +156,7 @@ def run(args, runner=subprocess.run):
             counts['missing_input'] += 1
             write_json(status_path, {'status': 'missing_input', 'paper': str(folder)})
             continue
-        fingerprint_paths = [pdf, reviews_path, prompt_path, ROOT / 'agent/run.mjs',
+        fingerprint_paths = [pdf, reviews_path, prompt_path, ROOT / 'agent/run.mjs', ROOT / 'agent/repair.mjs',
                              ROOT / 'agent/tools.mjs', ROOT / 'agent/pdf_reader.py',
                              ROOT / 'agent/trajectory.mjs', Path(__file__)]
         models_path = args.agent_dir / 'models.json'
@@ -159,7 +187,9 @@ def run(args, runner=subprocess.run):
             reviews = json.loads(reviews_path.read_text(encoding='utf-8'))
             if not reviews:
                 raise ValueError('Human review record is empty')
-            task = prompt['task'].replace('{{human_reviews}}', json.dumps(reviews, ensure_ascii=False))
+            review_input = ({'source': 'human_reviews/reviews.json', 'delivery': 'complete staged evidence'}
+                            if args.staged_evidence else reviews)
+            task = prompt['task'].replace('{{human_reviews}}', json.dumps(review_input, ensure_ascii=False))
             question = destination / 'input.txt'
             question.write_text(task, encoding='utf-8')
             pending = destination / 'response.pending.txt'
@@ -176,6 +206,8 @@ def run(args, runner=subprocess.run):
                        '--agent-dir', str(args.agent_dir.resolve()), '--thinking', args.thinking]
             if args.model:
                 command.extend(['--provider', args.provider, '--model', args.model])
+            if args.staged_evidence:
+                command.extend(['--staged-evidence', '--reviews-file', str(reviews_path.resolve())])
             with (destination / 'run.log').open('w', encoding='utf-8') as log:
                 result = runner(command, stdout=log, stderr=subprocess.STDOUT, timeout=args.timeout, check=False)
             if not trajectory.is_file() or not trajectory.stat().st_size:
@@ -189,7 +221,8 @@ def run(args, runner=subprocess.run):
                 raise ValueError('Agent returned an empty response')
             if args.require_full_pdf or args.require_thinking:
                 metrics, thinking, errors = audit_trajectory(
-                    trajectory, pdf, args.require_full_pdf, args.require_thinking)
+                    trajectory, pdf, args.require_full_pdf, args.require_thinking,
+                    reviews_path if args.staged_evidence else None)
                 status['audit'] = metrics
                 if errors:
                     raise ValueError('; '.join(errors))
@@ -227,6 +260,7 @@ def parser():
     result.add_argument('--require-full-pdf', action='store_true')
     result.add_argument('--require-thinking', action='store_true')
     result.add_argument('--dry-run', action='store_true')
+    result.add_argument('--staged-evidence', action='store_true')
     return result
 
 
