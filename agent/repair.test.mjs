@@ -77,3 +77,23 @@ test('thinking-only length stops receive bounded continuation and never mark evi
     assert.equal(events.length, 0);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('transport errors cannot reuse an older assistant acknowledgement as successful ingestion', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'staged-review-error-'));
+  try {
+    const reviewsFile = join(root, 'reviews.json');
+    await writeFile(reviewsFile, '{}');
+    const events = [];
+    let listener;
+    const session = {
+      messages: [{ role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'old acknowledgement' }] }],
+      getContextUsage: () => ({ tokens: 1000 }),
+      subscribe(callback) { listener = callback; return () => { listener = undefined; }; },
+      async prompt() { listener({ type: 'message_end', message: { role: 'assistant', stopReason: 'error', errorMessage: 'HTTP 400 overflow' } }); },
+    };
+    await assert.rejects(stagedReview({ session, tools: [{ name: 'list_pdfs', execute: async () => response({ files: ['paper.pdf'] }) }],
+      trace: [], prompt, question: 'AUDIT', reviewsFile,
+      trajectory: { event() {}, record: (type, data) => events.push({ type, data }) } }), /HTTP 400 overflow/);
+    assert.equal(events.length, 0);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

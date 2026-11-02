@@ -10,8 +10,17 @@ export async function stagedReview({ session, tools, trajectory, trace, prompt, 
   async function submit(text, continuation) {
     if ((session.getContextUsage()?.tokens ?? 0) > 48000) await session.compact(instructions.compact);
     for (let attempt = 0; attempt < 3; attempt++) {
-      await session.prompt(attempt ? continuation : text);
-      const message = last();
+      const before = session.messages.length;
+      let emitted;
+      const unsubscribe = session.subscribe?.(event => {
+        if (event.type === 'message_end' && event.message?.role === 'assistant') emitted = event.message;
+      });
+      try {
+        await session.prompt(attempt ? continuation : text);
+      } finally {
+        unsubscribe?.();
+      }
+      const message = emitted ?? (session.messages.length > before ? last() : undefined);
       if (message?.stopReason === 'error' || message?.stopReason === 'aborted') {
         throw new Error(message.errorMessage || `Model stopped: ${message.stopReason}`);
       }
