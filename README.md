@@ -105,3 +105,7 @@ with `BRAVE_SEARCH_API_KEY` when no You.com key is configured.
 Run `python3 trace_ui/server.py`, then open <http://127.0.0.1:8765>.
 The local viewer follows JSONL trajectories and displays inputs, thinking, outputs,
 tool calls, search results and PDF text. See [trace_ui](trace_ui/README.md).
+
+Discrete AI/human review summaries through DeepSeek are available in
+[`discritized_summary`](discritized_summary/README.md), with source quotes,
+per-reviewer attribution where available, token records and resumable chunk caches.

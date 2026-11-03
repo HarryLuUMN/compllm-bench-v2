@@ -10,3 +10,5 @@ quest_computes/.venv/
 
 .env
 quest_computes/pi_runtime/
+
+discritized_summary/results/
