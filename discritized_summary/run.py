@@ -40,16 +40,13 @@ def human_documents(data):
     return docs
 
 
-def validate(result, source):
-    if not isinstance(result, dict) or not isinstance(result.get('bullets'), list):
-        raise ValueError('Expected a JSON object with a bullets array')
-    for bullet in result['bullets']:
-        if not isinstance(bullet, dict) or any(not isinstance(bullet.get(k), str) or not bullet[k].strip()
-                                               for k in ('text', 'quote', 'reviewer')):
-            raise ValueError('Each bullet requires nonempty text, quote and reviewer')
-        if bullet['quote'] not in source:
-            raise ValueError('Supporting quote is not an exact substring of the source')
-    return result['bullets']
+def validate(text):
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError('Summary must contain bullet text')
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if any(not line.startswith('- ') or not line[2:].strip() for line in lines):
+        raise ValueError('Expected plain text with one - bullet per line')
+    return '\n'.join(lines)
 
 
 def summarize(text, identity, prompt, config, directory, complete):
@@ -60,8 +57,8 @@ def summarize(text, identity, prompt, config, directory, complete):
     for index, start in enumerate(range(0, len(text), size)):
         end = min(start + size, len(text))
         source = text[start:end]
-        content = json.dumps({'source': identity, 'start': start, 'end': end,
-                              'total_characters': len(text), 'text': source}, ensure_ascii=False)
+        content = (f"Source: {identity['kind']} / {identity['document']}\n"
+                   f'Passage: characters {start}–{end} of {len(text)}\n\n{source}')
         messages = [{'role': 'system', 'content': prompt['system']},
                     {'role': 'user', 'content': prompt['task'].replace('{{source}}', content)}]
         fingerprint = cache_key({'messages': messages, 'configuration': config})
@@ -70,24 +67,18 @@ def summarize(text, identity, prompt, config, directory, complete):
             record = json.loads(path.read_text())
         else:
             payload = {'model': config['model'], 'messages': messages,
-                       'thinking': {'type': 'disabled'}, 'max_tokens': config['max_tokens'],
-                       'response_format': {'type': 'json_object'}}
+                       'thinking': {'type': 'disabled'}, 'max_tokens': config['max_tokens']}
             response = complete(payload)
             record = {'fingerprint': fingerprint, 'request': payload, 'response': response}
             write_json(directory / f'{index:04d}_{fingerprint}.attempt.json', record)
             choice = response['choices'][0]
             if choice.get('finish_reason') != 'stop':
                 raise ValueError('Incomplete summary: API did not finish with stop')
-            parsed = json.loads(choice['message']['content'])
-            validate(parsed, source)
-            record['summary'] = parsed
+            record['summary'] = validate(choice['message']['content'])
             write_json(path, record)
-        items = validate(record['summary'], source)
-        for bullet in items:
-            bullets.append({**bullet, 'source': identity, 'chunk_start': start, 'chunk_end': end})
+        bullets.append(validate(record['summary']))
         usage.append(record['response'].get('usage', {}))
-    unique = list({json.dumps(b, sort_keys=True): b for b in bullets}.values())
-    return {'bullets': unique, 'source_sha256': hashlib.sha256(text.encode()).hexdigest(),
+    return {'text': '\n'.join(bullets), 'source_sha256': hashlib.sha256(text.encode()).hexdigest(),
             'source_characters': len(text), 'usage_by_chunk': usage}
 
 
@@ -150,8 +141,10 @@ def main():
                 value = summarize(text, identity, prompt, config, folder / 'chunks' / str(i),
                                   lambda payload: post(config['base_url'].rstrip('/') + '/chat/completions',
                                                        payload, key, config['timeout']))
-                result['summaries'].append({'source': identity, **value})
-            write_json(folder / 'summary.json', result)
+                filename = f'{i:02d}_{name}.txt'
+                (folder / filename).write_text(value.pop('text') + '\n', encoding='utf-8')
+                result['summaries'].append({'source': identity, 'file': filename, **value})
+            write_json(folder / 'metadata.json', result)
             write_json(folder / 'status.json', {'status': 'completed'})
         except (OSError, ValueError, RuntimeError, KeyError, IndexError) as error:
             write_json(folder / 'status.json', {'status': 'failed', 'error_type': type(error).__name__})

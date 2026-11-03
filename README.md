@@ -107,5 +107,5 @@ The local viewer follows JSONL trajectories and displays inputs, thinking, outpu
 tool calls, search results and PDF text. See [trace_ui](trace_ui/README.md).
 
 Discrete AI/human review summaries through DeepSeek are available in
-[`discritized_summary`](discritized_summary/README.md), with source quotes,
-per-reviewer attribution where available, token records and resumable chunk caches.
+[`discritized_summary`](discritized_summary/README.md), as plain-text bullet points,
+with token records and resumable chunk caches.

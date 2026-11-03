@@ -1,7 +1,7 @@
 # Discritized summary
 
 DeepSeek summarizes AI final responses and human reviewer comments separately into
-high-level English takeaways that group related comments, each with an exact source quote and reviewer identifier.
+high-level English takeaways that group related comments, as plain-text bullet lists. No JSON or source quotes are requested from the model.
 No thinking or intermediate AI trace is summarized. BMC author responses and eLife
 author responses/editor assessments are excluded before the API call. PLOS/BMJ
 histories contain mixed roles; the prompt asks the model to exclude non-reviewer
@@ -22,14 +22,15 @@ Pass `--paper` repeatedly to restrict a run; omit it to process the selected run
 Use `--output` to keep experiments separate. Local results may not contain the
 final Quest experiment: supply its actual results directory, do not select an older run.
 
-Each paper has `summary.json`, `status.json`, and cached per-chunk request/response
+Each paper has separate `.txt` summaries for the AI output and each human review
+document, plus `metadata.json`, `status.json`, and cached per-chunk request/response
 JSON with provider usage. Chunks cover every source character without truncation;
 16,000-character boundaries can split sentences, so boundary points may be omitted.
-Quotes are mechanically checked, while faithfulness and reviewer attribution remain
+Bullet formatting is checked; faithfulness and reviewer attribution remain
 model judgments. There is no cross-chunk or cross-reviewer semantic merge.
 Incomplete/invalid outputs fail the paper, never pass as a summary. Validated chunks
 are reused by input/prompt/config fingerprint on rerun; failed attempts are retained.
-`status.json` is authoritative; ignore a previous summary if the current status failed.
+`status.json` is authoritative; ignore previous text files if the current status failed.
 Usage is stored once per unique successful chunk, including reused chunks; failed
 attempt usage remains in `.attempt.json` files. A rerun does not imply new token use.
 Run a single process per output directory. Results are git-ignored and contain source
