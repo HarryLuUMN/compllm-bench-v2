@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=deepseek-discretization
 #SBATCH --account=p32963
-#SBATCH --partition=short
+#SBATCH --partition=normal
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
