@@ -1,7 +1,7 @@
 # Discritized summary
 
 DeepSeek summarizes AI final responses and human reviewer comments separately into
-atomic English bullets, each with an exact source quote and reviewer identifier.
+high-level English takeaways that group related comments, each with an exact source quote and reviewer identifier.
 No thinking or intermediate AI trace is summarized. BMC author responses and eLife
 author responses/editor assessments are excluded before the API call. PLOS/BMJ
 histories contain mixed roles; the prompt asks the model to exclude non-reviewer
