@@ -30,7 +30,9 @@ def human_documents(data):
         docs = [(a.get('label', ''), a.get('text', '')) for a in parts.get('assets', [])
                 if a.get('label', '').startswith('ReviewerReport_')]
     elif kind == 'elife_public_reviews':
-        docs = [('public_reviews', parts.get('public_reviews', ''))]
+        public = parts.get('public_reviews', '')
+        docs = [('public_reviews', public)] if isinstance(public, str) and public.strip() else [
+            ('reviewer_comments_quoted_in_author_response', parts.get('author_response', ''))]
     elif kind in ('plos_peer_review_history', 'bmj_open_peer_review_history'):
         docs = [('peer_review_history', parts.get('peer_review_history', ''))]
     else:

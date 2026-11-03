@@ -2,8 +2,10 @@
 
 DeepSeek summarizes AI final responses and human reviewer comments separately into
 high-level English takeaways that group related comments, as plain-text bullet lists. No JSON or source quotes are requested from the model.
-No thinking or intermediate AI trace is summarized. BMC author responses and eLife
-author responses/editor assessments are excluded before the API call. PLOS/BMJ
+No thinking or intermediate AI trace is summarized. BMC author responses and eLife editor assessments are excluded before the API call.
+eLife uses public reviews when available. For legacy entries with no public review,
+the mixed author-response document is supplied under an explicit source label so
+the model can extract quoted reviewer comments while excluding author replies. PLOS/BMJ
 histories contain mixed roles; the prompt asks the model to exclude non-reviewer
 material. Attribution in these mixed histories still needs human quality review.
 Unknown reviewer identities remain `unknown` rather than being invented.

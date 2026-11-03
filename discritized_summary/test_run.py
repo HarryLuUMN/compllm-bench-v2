@@ -14,6 +14,12 @@ class SummaryTests(unittest.TestCase):
             'public_reviews': 'review', 'author_response': 'author', 'elife_assessment': 'editor'}}),
             [('public_reviews', 'review')])
 
+    def test_elife_legacy_history_keeps_mixed_source_explicit(self):
+        self.assertEqual(human_documents({'kind': 'elife_public_reviews', 'parts': {
+            'public_reviews': '', 'author_response': 'Reviewer: limited evidence. Author: we disagree.'}}),
+            [('reviewer_comments_quoted_in_author_response',
+              'Reviewer: limited evidence. Author: we disagree.')])
+
     def test_accepts_bullets_and_rejects_json(self):
         self.assertEqual(validate('- Limited generalizability.\n- Strong evidence.'),
                          '- Limited generalizability.\n- Strong evidence.')
