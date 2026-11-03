@@ -35,3 +35,15 @@ Usage is stored once per unique successful chunk, including reused chunks; faile
 attempt usage remains in `.attempt.json` files. A rerun does not imply new token use.
 Run a single process per output directory. Results are git-ignored and contain source
 text, so handle them as research data. This pipeline does not launch full-dataset work.
+
+## Quest full run
+
+`quest_computes/discritized_summary.sbatch` runs four disjoint CPU workers through
+Slurm, independent of the local laptop, SSH connection or GPU allocation. The fixed
+input is the completed `quest_qwen38_27b_medium_full_20261023` experiment; output is
+`discritized_summary/results/deepseek_discretization_20261103`. Credentials live in
+ignored runtime storage with mode 600. Paper/chunk checkpoints survive job exit;
+resubmitting the same job reuses valid chunks. A job lock and per-shard locks prevent
+duplicate workers. Authentication, balance and access errors stop the affected
+worker immediately. Other failed papers are recorded for diagnosis, not retried
+indefinitely. Slurm has a 24-hour walltime; check job state before any resubmission.

@@ -1,5 +1,6 @@
 import argparse
 import hashlib
+import fcntl
 import json
 import os
 import shlex
@@ -92,7 +93,11 @@ def main():
     parser.add_argument('--prompt', type=Path, default=ROOT / 'prompts/discritized_summary.yaml')
     parser.add_argument('--paper', action='append', help='Restrict to a paper ID; repeatable')
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--shard-count', type=int, default=1)
+    parser.add_argument('--shard-index', type=int, default=0)
     args = parser.parse_args()
+    if not 0 <= args.shard_index < args.shard_count:
+        parser.error('Require 0 <= shard-index < shard-count')
     config = json.loads(args.config.read_text())
     if config['chunk_characters'] < 1 or config['max_tokens'] < 1:
         raise ValueError('Chunk and output budgets must be positive')
@@ -116,6 +121,8 @@ def main():
         raise ValueError('Requested papers have no completed AI response')
     if not selected:
         raise ValueError('No completed AI responses found')
+    selected = {paper: response for index, (paper, response) in enumerate(sorted(selected.items()))
+                if index % args.shard_count == args.shard_index}
     if args.dry_run:
         print(json.dumps({'papers': len(selected), 'api_calls': 0}))
         return
@@ -124,11 +131,15 @@ def main():
     key = os.environ.get('DEEPSEEK_API_KEY')
     if not key:
         raise ValueError('DEEPSEEK_API_KEY is missing')
+    args.output.mkdir(parents=True, exist_ok=True)
+    lock = (args.output / f'shard_{args.shard_index}.lock').open('w')
+    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     failures = []
     for paper, response in selected.items():
         folder = args.output / paper
         folder.mkdir(parents=True, exist_ok=True)
         try:
+            write_json(folder / 'status.json', {'status': 'running'})
             documents = [('ai_final', response.read_text())]
             reviews = json.loads((args.database / paper / 'human_reviews/reviews.json').read_text())
             documents += human_documents(reviews)
@@ -147,7 +158,13 @@ def main():
             write_json(folder / 'metadata.json', result)
             write_json(folder / 'status.json', {'status': 'completed'})
         except (OSError, ValueError, RuntimeError, KeyError, IndexError) as error:
-            write_json(folder / 'status.json', {'status': 'failed', 'error_type': type(error).__name__})
+            write_json(folder / 'status.json', {'status': 'failed', 'error_type': type(error).__name__,
+                                                       'error': str(error) if isinstance(error, RuntimeError)
+                                                       else 'Input or output validation failed'})
+            if isinstance(error, RuntimeError) and any(
+                    f'HTTP {code}' in str(error) for code in (401, 402, 403)):
+                raise
+
             failures.append(paper)
         print(json.dumps({'paper': paper, 'status': 'failed' if paper in failures else 'completed'}), flush=True)
     if failures:
