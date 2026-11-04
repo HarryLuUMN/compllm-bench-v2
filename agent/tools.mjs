@@ -11,12 +11,13 @@ const integer = { type: 'integer', minimum: 1 };
 const object = (properties, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
 const result = (value) => ({ content: [{ type: 'text', text: JSON.stringify(value) }], details: {} });
 
-const citationNumber = String.raw`(?:\d{1,3}(?:[, \u00a0\u202f]\d{3})+|\d+)(?:\.\d+)?(?:\s*[kmb]\b)?(?![\d.,])`;
+const citationNumber = String.raw`(?:\d{1,3}(?:[, \u00a0\u202f]\d{3})+|\d+)(?:\.\d+)?(?:\s*[kmb]\b)?(?!\d|[.,]\d)`;
 const citationText = [
   new RegExp(String.raw`\bcited\s+by\s*[:：]?\s*\(?${citationNumber}`, 'i'),
   new RegExp(String.raw`\b${citationNumber}\s+citations?\b`, 'i'),
   new RegExp(String.raw`\bcitation[\s_-]*(?:count|number)\s*[:：=]?\s*${citationNumber}`, 'i'),
   new RegExp(String.raw`\bcitations\s*(?:[:：=]\s*|\(\s*)${citationNumber}`, 'i'),
+  new RegExp(String.raw`\bcitations\s+${citationNumber}(?=\s*(?:$|[|•;]))`, 'i'),
   new RegExp(String.raw`(?:被引(?:用)?(?:次数)?|引用次数)\s*[:：]?\s*${citationNumber}`, 'i'),
   new RegExp(String.raw`${citationNumber}\s*次(?:被引|引用)`, 'i'),
 ];

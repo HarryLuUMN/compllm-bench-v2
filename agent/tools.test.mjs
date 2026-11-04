@@ -68,7 +68,7 @@ test('Brave search uses the configured key when You.com is not configured', asyn
 
 test('citation counts are recognized without treating ordinary references as counts', () => {
   for (const text of ['Cited by 123', 'cited by: 1,234', '1.2k citations', '0 citations',
-    'Citation count: 42', 'Citation number 24', 'Citations: 123', 'Citations (123)',
+    'Cited by 123.', 'Citation count: 42', 'Citation number 24', 'Citations: 123', 'Citations (123)', 'Citations 123', 'Citations 123 | Article details',
     '被引用次数：123', '123次引用']) {
     assert.ok(citationCountReasons({ description: text }).length, text);
   }
