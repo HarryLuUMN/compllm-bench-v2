@@ -22,7 +22,10 @@ if (values.help) {
   process.exit(0);
 }
 const prompt = await python(['prompt', resolve(values.prompt)]);
-const tools = await createTools(resolve(values.folder));
+let trajectory;
+const tools = await createTools(resolve(values.folder), {
+  onSearchFilter: event => trajectory?.record('search_result_filter', event),
+});
 const sdkPath = process.env.PI_SDK_PATH || resolve(here, '../../pi-agent/node_modules/@earendil-works/pi-coding-agent/dist/index.js');
 const loadSdk = () => import(pathToFileURL(sdkPath).href);
 if (values.check) {
@@ -36,7 +39,7 @@ const question = values['question-file'] ? await readFile(resolve(values['questi
 if (!question?.trim()) throw new Error('--question or --question-file is required');
 if (Boolean(values.provider) !== Boolean(values.model)) throw new Error('Specify --provider and --model together');
 if (!['off', 'low', 'medium', 'high'].includes(values.thinking)) throw new Error('Invalid --thinking level');
-const trajectory = new Trajectory({ root: resolve(values['trace-root']),
+trajectory = new Trajectory({ root: resolve(values['trace-root']),
   file: values.trajectory, folder: resolve(values.folder), metadata: {
     prompt_path: resolve(values.prompt), system_prompt: prompt.system, question,
     requested_provider: values.provider, requested_model: values.model, thinking_level: values.thinking,

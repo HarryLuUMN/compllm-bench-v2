@@ -43,6 +43,16 @@ Tools:
   maximum 60,000 text characters per call. Rejects paths outside the selected
   folder, including symlink escapes. Returns page numbers and truncation flags.
 - `web_search`: up to 5 results with source URLs and snippets, 30-second timeout.
+  You.com and Brave results are automatically checked before truncation. Any hit
+  containing explicit citation counts (for example `Cited by 123`, `123 citations`,
+  or a nested `citationCount` field) is removed in full before the model sees it.
+  Ordinary reference numbers, publication years and DOI numbers are retained.
+  This is a deterministic pattern filter, not a guarantee against every possible
+  wording or indirect popularity signal. It does not filter PDF text or already
+  recorded runs. If all hits are excluded, the model receives an empty list.
+  The model result includes only the removal count and policy name; a separate
+  `search_result_filter` trajectory event retains excluded hits and reasons for
+  audit, without adding that event to the model's context.
 
 Only these three tools are active. No shell or file editing tools are exposed.
 Sessions are in memory; answers stream to stdout and tool names go to stderr.
