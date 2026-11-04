@@ -1,12 +1,14 @@
 """Local, dependency-free viewer for append-only agent trajectories."""
 import argparse
 import json
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 ASSETS = Path(__file__).resolve().parent
 DEFAULT_ROOT = ASSETS.parent / 'trace_databases'
+DEFAULT_SUMMARIES = ASSETS.parent / 'discritized_summary/results/deepseek_discretization_20261103'
 
 
 def trace_path(root, name):
@@ -38,12 +40,39 @@ def read_events(path, cursor):
     return {'events': events, 'cursor': cursor, 'reset': reset, 'more': cursor < size and bool(events)}
 
 
-def handler_for(root):
+def summary_detail(root, paper):
+    if not re.fullmatch(r'paper_[0-9]{4}', paper):
+        raise ValueError('Invalid paper ID')
+    folder = (root / paper).resolve()
+    if not folder.is_relative_to(root.resolve()):
+        raise ValueError('Invalid summary path')
+    if json.loads((folder / 'status.json').read_text())['status'] != 'completed':
+        raise ValueError('Summary is not complete')
+    metadata = json.loads((folder / 'metadata.json').read_text())
+    sections = []
+    for item in metadata['summaries']:
+        path = (folder / item['file']).resolve()
+        if not path.is_relative_to(folder) or path.suffix != '.txt':
+            raise ValueError('Invalid summary file')
+        sections.append({'kind': item['source']['kind'], 'document': item['source']['document'],
+                         'text': path.read_text(encoding='utf-8')})
+    return {'paper': paper, 'sections': sections}
+
+
+def handler_for(root, summaries_root=DEFAULT_SUMMARIES):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             url = urlsplit(self.path)
             try:
-                if url.path == '/api/traces':
+                if url.path == '/api/summaries':
+                    papers = sorted(p.parent.name for p in summaries_root.glob('paper_*/metadata.json')
+                                    if re.fullmatch(r'paper_[0-9]{4}', p.parent.name)
+                                    and p.resolve().is_relative_to(summaries_root.resolve()))
+                    self.send_json({'papers': papers})
+                elif url.path == '/api/summary':
+                    query = parse_qs(url.query)
+                    self.send_json(summary_detail(summaries_root, query.get('paper', [''])[0]))
+                elif url.path == '/api/traces':
                     rows = []
                     for path in root.rglob('*.jsonl'):
                         if not path.resolve().is_relative_to(root.resolve()):
@@ -55,7 +84,9 @@ def handler_for(root):
                     query = parse_qs(url.query)
                     self.send_json(read_events(trace_path(root, query.get('trace', [''])[0]), int(query.get('cursor', ['0'])[0])))
                 else:
-                    names = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}
+                    names = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css',
+                             '/summaries': 'summaries.html', '/summaries.js': 'summaries.js',
+                             '/summaries.css': 'summaries.css'}
                     if url.path not in names:
                         self.send_error(404)
                         return
@@ -85,8 +116,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=DEFAULT_ROOT)
     parser.add_argument('--port', type=int, default=8765)
+    parser.add_argument('--summaries-root', type=Path, default=DEFAULT_SUMMARIES)
     args = parser.parse_args()
-    server = ThreadingHTTPServer(('127.0.0.1', args.port), handler_for(args.root.resolve()))
+    server = ThreadingHTTPServer(('127.0.0.1', args.port), handler_for(args.root.resolve(), args.summaries_root.resolve()))
     print(f'Trace viewer: http://127.0.0.1:{args.port}', flush=True)
     try:
         server.serve_forever()

@@ -55,3 +55,16 @@ The public site is https://harryluumn.github.io/compllm-bench-v2/.
 The export keeps visible events and full model contexts, and omits redundant
 provider transport records. Follow is disabled for snapshots. Source JSONL files
 remain unchanged. Newly recorded local runs require another export and publish.
+
+## Review summary browser
+
+Open `/summaries` on the same live viewer (for example
+http://127.0.0.1:8767/summaries). Search by paper ID, move between papers, read AI
+and human reviewer bullets side by side, or download a paper's plain-text summaries.
+The browser reads only completed summaries and displays source text without HTML
+interpretation. Full API request records and credentials are not exposed.
+
+The default dataset is `discritized_summary/results/deepseek_discretization_20261103`
+under the viewer's repository. Override it with `--summaries-root /path/to/run`.
+The Quest connection copies viewer assets only; summary text is fetched on demand
+through the same SSH tunnel. Static trace exports keep their existing trace-only UI.

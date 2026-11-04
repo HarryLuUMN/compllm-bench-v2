@@ -20,7 +20,7 @@ def export_site(root, destination):
     for name in ['index.html', 'style.css', 'app.js']:
         shutil.copyfile(ASSETS / name, destination / name)
     index = destination / 'index.html'
-    index.write_text(index.read_text().replace('<script type="module"',
+    index.write_text(index.read_text().replace('<a id="summaries-link" href="/summaries">Review summaries →</a>', '').replace('<script type="module"',
                     '<script>window.TRACE_STATIC=true;</script><script type="module"'))
     (destination / '.nojekyll').touch()
     traces = []

@@ -17,7 +17,7 @@ target=zgy2900@quest.northwestern.edu
 ssh_options=(-i "$HOME/.ssh/codex_quest_northwestern_ed25519" -o BatchMode=yes
   -o ConnectTimeout=15 -o ControlPath=none -o ServerAliveInterval=30 -o ServerAliveCountMax=3)
 ssh "${ssh_options[@]}" "$target" "mkdir -p '$remote_root/trace_ui'"
-scp "${ssh_options[@]}" "$repo_root"/trace_ui/{server.py,index.html,app.js,style.css} "$target:$remote_root/trace_ui/"
+scp "${ssh_options[@]}" "$repo_root"/trace_ui/{server.py,index.html,app.js,style.css,summaries.html,summaries.js,summaries.css} "$target:$remote_root/trace_ui/"
 echo "Quest trace viewer: http://127.0.0.1:$local_port · $run_id"
 exec ssh -tt "${ssh_options[@]}" -o ExitOnForwardFailure=yes \
   -L "127.0.0.1:$local_port:127.0.0.1:$remote_port" "$target" \

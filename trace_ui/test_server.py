@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from server import read_events, trace_path
+from server import read_events, trace_path, summary_detail
 
 
 class TraceTests(unittest.TestCase):
@@ -41,6 +41,27 @@ class TraceTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 trace_path(root, 'escape.jsonl')
             self.assertEqual(trace_path(root, 'nested/run.jsonl'), (root / 'nested/run.jsonl').resolve())
+
+    def test_summary_reads_completed_text_and_blocks_escape(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paper = root / 'paper_0001'
+            paper.mkdir()
+            (paper / 'status.json').write_text('{"status":"completed"}')
+            (paper / 'ai.txt').write_text('- A finding.\n')
+            metadata = {'summaries': [{'source': {'kind': 'ai', 'document': 'ai_final'}, 'file': 'ai.txt'}]}
+            (paper / 'metadata.json').write_text(json.dumps(metadata))
+            self.assertEqual(summary_detail(root, 'paper_0001')['sections'][0]['text'], '- A finding.\n')
+            for value in ['../secret', 'paper_0001/../../secret', '/tmp/file']:
+                with self.assertRaises(ValueError):
+                    summary_detail(root, value)
+            metadata['summaries'][0]['file'] = '../secret.txt'
+            (paper / 'metadata.json').write_text(json.dumps(metadata))
+            with self.assertRaises(ValueError):
+                summary_detail(root, 'paper_0001')
+            (paper / 'status.json').write_text('{"status":"failed"}')
+            with self.assertRaises(ValueError):
+                summary_detail(root, 'paper_0001')
 
 
 if __name__ == '__main__':

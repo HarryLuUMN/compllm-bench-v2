@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Review summaries</title><link rel="stylesheet" href="/summaries.css"></head>
+<body>
+<header><a class="back" href="/">← Agent traces</a><h1>Review summaries</h1><span id="count" role="status">Loading papers…</span></header>
+<div class="layout">
+<aside><label for="search">Find a paper</label><input id="search" type="search" placeholder="Paper ID, e.g. 0001" autocomplete="off"><p id="matches"></p><nav id="papers" aria-label="Papers"></nav><button id="more" hidden>Show more</button></aside>
+<main><div class="toolbar"><h2 id="title">Select a paper</h2><div><button id="previous" disabled>← Previous</button><button id="next" disabled>Next →</button><button id="download" disabled>Download text</button></div></div><p id="state" role="status">AI and human review summaries, side by side.</p><div class="columns"><section aria-labelledby="ai-heading"><h3 id="ai-heading">AI review</h3><div id="ai"></div></section><section aria-labelledby="human-heading"><h3 id="human-heading">Human reviews</h3><div id="human"></div></section></div></main>
+</div><script type="module" src="/summaries.js"></script>
+</body></html>
