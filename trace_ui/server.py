@@ -65,9 +65,8 @@ def handler_for(root, summaries_root=DEFAULT_SUMMARIES):
             url = urlsplit(self.path)
             try:
                 if url.path == '/api/summaries':
-                    papers = sorted(p.parent.name for p in summaries_root.glob('paper_*/metadata.json')
-                                    if re.fullmatch(r'paper_[0-9]{4}', p.parent.name)
-                                    and p.resolve().is_relative_to(summaries_root.resolve()))
+                    papers = sorted(p.name for p in summaries_root.iterdir()
+                                    if re.fullmatch(r'paper_[0-9]{4}', p.name)) if summaries_root.exists() else []
                     self.send_json({'papers': papers})
                 elif url.path == '/api/summary':
                     query = parse_qs(url.query)
