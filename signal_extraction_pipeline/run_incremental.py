@@ -37,6 +37,7 @@ def main():
         'tree_review_labels.yaml' if args.topic_tree else 'incremental_review_labels.yaml')
     prompt = load_prompt(prompt_path)
     topic_prompts = {'context': load_prompt(args.tree_context_prompt),
+                     'select': load_prompt(ROOT / 'prompts/select_review_topics.yaml'),
                      'place': load_prompt(args.place_topics_prompt)} if args.topic_tree else None
     for template in [prompt, *([topic_prompts['place']] if topic_prompts else [])]:
         if '{{input}}' not in template['task']:

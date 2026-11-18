@@ -138,6 +138,31 @@ class TopicTreeTests(unittest.TestCase):
             self.assertEqual(state['status'], 'completed')
             self.assertEqual(len(state['reviews']), 2)
 
+    def test_selected_topics_hide_unselected_labels_and_resume_prefix(self):
+        prompts = {**TOPICS, 'select': load_prompt(ROOT / 'prompts/select_review_topics.yaml')}
+        responses = iter([
+            labels(new=['data leakage', 'lack of generalizability']),
+            placement(groups=[('data integrity', ['data leakage']),
+                              ('external validity', ['lack of generalizability'])]),
+            {'selected_topics': ['data integrity']}, labels(['data leakage']),
+        ])
+        calls = []
+        def complete(request):
+            calls.append(request)
+            return json.dumps(next(responses))
+        reviews = [{'review_id': str(i), 'text': 'review'} for i in range(2)]
+        with tempfile.TemporaryDirectory() as directory:
+            first = run_incremental(reviews[:1], directory, LABEL, CONFIG, complete, prompts)
+            original = deepcopy(first['reviews'][0])
+            state = run_incremental(reviews, directory, LABEL, CONFIG, complete, prompts)
+            self.assertEqual(call_tree(calls[2]), ['data integrity', 'external validity'])
+            self.assertNotIn('data leakage', json.dumps(calls[2]))
+            self.assertEqual(call_tree(calls[3]), {'data integrity': ['data leakage']})
+            self.assertNotIn('external validity', call_tree(calls[3]))
+            self.assertEqual(state['reviews'][0], original)
+            self.assertEqual(state['reviews'][1]['selected_topics'], ['data integrity'])
+            run_incremental(reviews, directory, LABEL, CONFIG, lambda _: self.fail('Must resume'), prompts)
+
     def test_invalid_placements_rejected(self):
         cases = [placement([('a', 'unknown')]), placement(),
                  placement(groups=[('new', ['b'])]),
@@ -232,7 +257,8 @@ class TopicTreeTests(unittest.TestCase):
                 cli.main()
                 self.assertEqual(api.call_count, 2)
                 first, second = [call.args[1]['messages'] for call in api.call_args_list]
-                self.assertEqual(first[:2], second[:2])
+                self.assertEqual(call_tree(first), {})
+                self.assertEqual(call_tree(second), [])
                 self.assertEqual(set(call_payload(first)), {'review'})
                 self.assertEqual(set(call_payload(second)), {'new_labels'})
                 cli.main()

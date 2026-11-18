@@ -248,3 +248,11 @@ Slurm requeue, with at most two automatic requeues. Scheduler requeue permission
 still apply; if unavailable, the checkpoint remains ready for manual resubmission.
 The source revision is frozen for this run; later working-tree edits do not change
 its prompts or code. Completed reviews are not backfilled or rerun on resume.
+
+Topic selection precedes label generation: all topic names are screened against
+each review, then only selected topics' labels are supplied for reuse and creation.
+New labels are placed using all topic names. Exact matches against the global label
+space are canonicalized to prevent duplicate names outside selected topics.
+Each review records selected_topics; raw requests and usage remain in attempts.
+This is format 5; legacy checkpoints require an explicit backed-up migration that
+preserves completed reviews and records the old fingerprint.

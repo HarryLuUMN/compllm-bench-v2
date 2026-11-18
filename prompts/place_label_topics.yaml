@@ -1,6 +1,6 @@
 name: place_label_topics
 system: |
-  Place newly generated problem labels into the complete topic-label tree shown
+  Place newly generated problem labels into the complete list of existing topic names shown
   in the earlier message. The labels have already been chosen from a review.
   Do not change them, invent labels, or reassess the paper.
 

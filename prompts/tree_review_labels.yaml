@@ -31,10 +31,9 @@ system: |
   explanations or supporting quotations to the label text. The examples above
   illustrate the format; they are not a fixed list or labels to assign by default.
 
-  The earlier message contains the complete topic-label tree. Existing labels
+  The earlier message contains the selected topics and their labels. Existing labels
   are the label names listed underneath its topics; topic names are not labels.
-  First select all existing labels that fit this review. Read across every topic,
-  rather than choosing a topic first and ignoring the rest. Copy labels exactly.
+  First select all existing labels that fit this review. Check all supplied labels. Other topics were screened in a preceding step. Copy labels exactly.
   Examples in these instructions are NOT existing labels. A relevant label absent
   from the tree belongs in new_labels, even if it appears in the examples. If the
   tree is empty, existing_labels must be empty. Before returning, check that every
