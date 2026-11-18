@@ -219,3 +219,32 @@ English YAML prompts in `prompts/` are now:
 The former `--assign-topics-prompt` and `--create-topics-prompt` flags and separate
 stage templates have been replaced by the combined placement prompt. Compute
 settings remain in `quest_computes/incremental_review_labels.json`.
+
+## Quest AI/Human full batch
+
+`quest_computes/topic_label_full.sbatch` runs one sequential CPU worker through
+Slurm independently of the laptop and SSH session. The source is the completed
+`deepseek_discretization_20261103` summary run: 5,023 AI and 10,359 human documents
+across 5,023 papers. Paper text is not included. Expected counts, run name and retry
+bounds are in `quest_computes/topic_label_full_run.json`.
+
+Before submission, freeze the required source files, prompts and compute configs
+under `quest_computes/pi_runtime/topic_labels_ai_human_full_20261118/code_snapshot`.
+Store only the API credential in sibling `deepseek.env` with mode 600. The worker
+validates source coverage and pins review order/content into `input_reviews.json`
+and `input_manifest.json`. Requeues read this immutable input snapshot; the full
+run starts with an empty tree, not the pilot tree.
+
+Results use `signal_extraction_pipeline/results/topic_labels_ai_human_full_20261118`.
+`progress.json`, `events.jsonl`, Slurm logs and numbered attempt logs are under the
+runtime directory. The checkpoint and full API attempt records remain under results.
+A job lock and worker lock prevent duplicate execution. Temporary/model-validation
+failures resume the unprocessed suffix, stopping after three consecutive failures
+at the same review. Authentication, balance, access, input-budget and configuration
+errors stop immediately. Nothing silently truncates or reduces the shared space.
+
+The CPU job has a 48-hour limit. A pre-timeout signal stops the worker and requests
+Slurm requeue, with at most two automatic requeues. Scheduler requeue permissions
+still apply; if unavailable, the checkpoint remains ready for manual resubmission.
+The source revision is frozen for this run; later working-tree edits do not change
+its prompts or code. Completed reviews are not backfilled or rerun on resume.

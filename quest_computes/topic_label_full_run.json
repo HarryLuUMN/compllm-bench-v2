@@ -1,0 +1,9 @@
+{
+  "run_id": "topic_labels_ai_human_full_20261118",
+  "summary_run": "deepseek_discretization_20261103",
+  "expected_papers": 5023,
+  "expected_reviews_by_kind": {"ai": 5023, "human": 10359},
+  "max_failures_per_review": 3,
+  "retry_delay_seconds": 20,
+  "progress_interval_seconds": 30
+}
