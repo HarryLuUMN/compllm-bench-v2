@@ -16,13 +16,12 @@ def canonical(value, names, kind):
     return lookup[normalized(value)]
 
 
-def validate_assignment(answer, labels, tree):
-    if not isinstance(answer, dict) or set(answer) != {'assignments', 'remaining_labels'}:
-        raise ValueError('Expected assignments and remaining_labels')
-    if not isinstance(answer['assignments'], list) or not isinstance(answer['remaining_labels'], list):
-        raise ValueError('Topic assignments and remaining labels must be arrays')
+def validate_placement(answer, labels, tree):
+    if not isinstance(answer, dict) or set(answer) != {'assignments', 'new_topics'}:
+        raise ValueError('Expected assignments and new_topics')
+    if not isinstance(answer['assignments'], list):
+        raise ValueError('Topic assignments must be an array')
     assigned = {}
-    remaining = []
     for item in answer['assignments']:
         if not isinstance(item, dict) or set(item) != {'label', 'topic'}:
             raise ValueError('Each assignment requires a label and topic')
@@ -30,14 +29,9 @@ def validate_assignment(answer, labels, tree):
         if label in assigned:
             raise ValueError('A label can only be assigned once')
         assigned[label] = canonical(item['topic'], tree, 'topic')
-    for value in answer['remaining_labels']:
-        label = canonical(value, labels, 'label')
-        if label in assigned or label in remaining:
-            raise ValueError('Duplicate assigned or remaining label')
-        remaining.append(label)
-    if set(assigned) | set(remaining) != set(labels):
-        raise ValueError('Every new label must be assigned or marked remaining')
-    return assigned, remaining
+    remaining = [label for label in labels if label not in assigned]
+    groups = validate_new_topics({'new_topics': answer['new_topics']}, remaining, tree)
+    return assigned, groups
 
 
 def validate_new_topics(answer, remaining, tree):
@@ -88,24 +82,21 @@ def validate_tree(tree, labels):
         raise ValueError('Every label must belong to exactly one topic')
 
 
-def extend_tree(tree, new_labels, review, prompts, configuration, complete):
+def tree_messages(context_prompt, stage_prompt, tree, payload):
+    prefix = messages(context_prompt, 'tree', json.dumps(tree, ensure_ascii=False, separators=(',', ':')))
+    stage = messages(stage_prompt, 'input', json.dumps(payload, ensure_ascii=False))
+    return prefix + [{'role': 'user', 'content': '\n\n'.join(part['content'] for part in stage)}]
+
+
+def extend_tree(tree, new_labels, prompts, configuration, complete):
     updated = {topic: labels[:] for topic, labels in tree.items()}
-
-    def ask(stage, payload):
-        request = messages(prompts[stage], 'input', json.dumps(payload, ensure_ascii=False))
-        if len(json.dumps(request, ensure_ascii=False).encode('utf-8')) > configuration['max_input_bytes']:
-            raise ValueError('Review plus full topic-label tree exceeds input budget; no text was truncated')
-        return json.loads(complete(request))
-
-    assigned, remaining = {}, list(new_labels)
-    if new_labels and updated:
-        answer = ask('assign', {'review': review, 'topic_label_tree': updated, 'new_labels': new_labels})
-        assigned, remaining = validate_assignment(answer, new_labels, updated)
+    if not new_labels:
+        return updated, {}, {}
+    request = tree_messages(prompts['context'], prompts['place'], tree, {'new_labels': new_labels})
+    if len(json.dumps(request, ensure_ascii=False).encode('utf-8')) > configuration['max_input_bytes']:
+        raise ValueError('New labels plus full topic-label tree exceeds input budget; no text was truncated')
+    assigned, groups = validate_placement(json.loads(complete(request)), new_labels, tree)
     for label, topic in assigned.items():
         updated[topic].append(label)
-    groups = {}
-    if remaining:
-        answer = ask('create', {'review': review, 'topic_label_tree': updated, 'remaining_labels': remaining})
-        groups = validate_new_topics(answer, remaining, updated)
-        updated.update(groups)
+    updated.update(groups)
     return updated, assigned, groups

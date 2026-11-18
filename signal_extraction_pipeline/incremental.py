@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from signal_extraction_pipeline.core import cache_key, messages, write_json
-from signal_extraction_pipeline.topic_tree import extend_tree, validate_tree
+from signal_extraction_pipeline.topic_tree import extend_tree, tree_messages, validate_tree
 
 
 def load_reviews(path):
@@ -63,7 +63,7 @@ def run_incremental(reviews, output, prompt, configuration, complete, topic_prom
     checkpoint = output / 'state.json'
     settings = {'prompt': prompt, 'configuration': configuration, 'format': 2}
     if topic_prompts is not None:
-        settings.update(format=3, topic_prompts=topic_prompts)
+        settings.update(format=4, topic_prompts=topic_prompts)
     fingerprint = cache_key(settings)
     state = json.loads(checkpoint.read_text()) if checkpoint.exists() else {
         'fingerprint': fingerprint, 'configuration': configuration, 'label_space': [], 'reviews': []}
@@ -81,11 +81,12 @@ def run_incremental(reviews, output, prompt, configuration, complete, topic_prom
     write_json(checkpoint, state)
     try:
         for review in reviews[len(done):]:
-            data = {'available_labels': state['label_space'], 'review': review}
             if topic_prompts is not None:
-                data['topic_label_tree'] = state['topic_label_tree']
-            payload = json.dumps(data, ensure_ascii=False)
-            request = messages(prompt, 'input', payload)
+                request = tree_messages(topic_prompts['context'], prompt, state['topic_label_tree'],
+                                        {'review': review})
+            else:
+                data = {'available_labels': state['label_space'], 'review': review}
+                request = messages(prompt, 'input', json.dumps(data, ensure_ascii=False))
             if len(json.dumps(request, ensure_ascii=False).encode('utf-8')) > configuration['max_input_bytes']:
                 raise ValueError('Review plus full label space exceeds input budget; no text was truncated')
             response = complete(request)
@@ -97,8 +98,8 @@ def run_incremental(reviews, output, prompt, configuration, complete, topic_prom
                           classification_corrected=(existing != proposed['existing_labels']
                                                     or new != proposed['new_labels']))
             if topic_prompts is not None:
-                tree, assigned, created = extend_tree(state['topic_label_tree'], new, review,
-                                                      topic_prompts, configuration, complete)
+                tree, assigned, created = extend_tree(state['topic_label_tree'], new, topic_prompts,
+                                                      configuration, complete)
                 validate_tree(tree, state['label_space'] + new)
                 record.update(topic_assignments=assigned, new_topics=created,
                               topic_labels={topic: [label for label in record['labels'] if label in group]

@@ -19,11 +19,11 @@ def main():
     parser.add_argument('--input', type=Path, required=True, help='Completed summary run directory or a JSON array of reviews')
     parser.add_argument('--output', type=Path, default=None)
     parser.add_argument('--config', type=Path, default=ROOT / 'quest_computes/incremental_review_labels.json')
-    parser.add_argument('--prompt', type=Path, default=ROOT / 'prompts/incremental_review_labels.yaml')
+    parser.add_argument('--prompt', type=Path, help='Override the label-generation prompt')
     parser.add_argument('--env', type=Path, default=ROOT / '.env')
     parser.add_argument('--topic-tree', action='store_true', help='Group new labels into existing or newly created topics')
-    parser.add_argument('--assign-topics-prompt', type=Path, default=ROOT / 'prompts/assign_label_topics.yaml')
-    parser.add_argument('--create-topics-prompt', type=Path, default=ROOT / 'prompts/create_label_topics.yaml')
+    parser.add_argument('--tree-context-prompt', type=Path, default=ROOT / 'prompts/topic_tree_context.yaml')
+    parser.add_argument('--place-topics-prompt', type=Path, default=ROOT / 'prompts/place_label_topics.yaml')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
     if args.output is None:
@@ -33,12 +33,16 @@ def main():
     config = json.loads(args.config.read_text())
     if any(type(config.get(k)) is not int or config[k] < 1 for k in ('max_tokens', 'timeout', 'max_input_bytes')):
         raise ValueError('Token, timeout and input budgets must be positive integers')
-    prompt = load_prompt(args.prompt)
-    topic_prompts = {'assign': load_prompt(args.assign_topics_prompt),
-                     'create': load_prompt(args.create_topics_prompt)} if args.topic_tree else None
-    for template in [prompt, *(topic_prompts or {}).values()]:
+    prompt_path = args.prompt or ROOT / 'prompts' / (
+        'tree_review_labels.yaml' if args.topic_tree else 'incremental_review_labels.yaml')
+    prompt = load_prompt(prompt_path)
+    topic_prompts = {'context': load_prompt(args.tree_context_prompt),
+                     'place': load_prompt(args.place_topics_prompt)} if args.topic_tree else None
+    for template in [prompt, *([topic_prompts['place']] if topic_prompts else [])]:
         if '{{input}}' not in template['task']:
-            raise ValueError('Prompt must contain {{input}}')
+            raise ValueError('Stage prompt must contain {{input}}')
+    if topic_prompts and '{{tree}}' not in topic_prompts['context']['task']:
+        raise ValueError('Context prompt must contain {{tree}}')
     if args.dry_run:
         print(json.dumps({'reviews': len(reviews), 'api_calls': 0}))
         return

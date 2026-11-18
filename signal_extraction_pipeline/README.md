@@ -164,36 +164,58 @@ This command only validates inputs. Remove `--dry-run` to make API calls in a la
 experiment. Tree mode uses a separate default output directory,
 `signal_extraction_pipeline/results/incremental_topic_tree`.
 
-Each review follows this exact order:
-1. Select existing labels and generate any missing labels, with the complete
-   current tree and all existing labels in context.
-2. Assign new labels to existing topics; explicitly return labels with no fit.
-3. Group those remaining labels into newly created topics.
+Tree mode uses at most two LLM calls per review:
+1. Select existing labels and generate missing labels. The model sees the entire
+   topic-label tree once, followed by the full review. There is no duplicate flat
+   `available_labels` list; all existing labels are read from the tree's leaves.
+2. In one response, assign new labels to existing topics first, then create topics
+   for the remaining labels. This request contains only the full tree and the new
+   labels, not the review or its metadata. With an empty tree, all labels go to new
+   topics; with no new labels, the second call is skipped.
 
-If the tree is empty, step 2 is unnecessary. If there are no new labels, both
-placement steps are skipped. If all new labels fit existing topics, step 3 is
-skipped. Every actual request includes the full review and complete current tree;
-no retrieval, pruning or silent truncation is used. The same input-byte guard
-applies to every stage. An oversized context stops processing.
+Both calls start with exactly the same common system message and a dedicated user
+message containing the complete tree, serialized consistently. Stage instructions
+and changing review/label data appear only after that shared prefix. This makes
+unchanged taxonomy prefixes eligible for provider caching across reviews and
+stages, rather than placing changing review text or different task instructions
+before the tree. Tree updates can reduce matching prefix length; actual cache hits
+are not guaranteed. Provider usage, including cache-hit/miss fields, is saved.
+
+No retrieval, pruning or silent truncation is used. The input-byte guard covers
+all messages in each stage, including the whole tree. An oversized context stops
+processing. Topic placement now relies on label wording without the original
+review; semantic grouping quality and caching savings need a later live pilot.
 
 Each label has exactly one parent topic. Reused labels keep that parent. Validators
 reject unknown topic/label names, duplicate placement, missing labels, empty topics
-and existing topic names presented as new. Topic names may differ only by case or
-spacing when selecting an existing topic; their stored spelling is preserved.
-Semantic equivalence of topic names still depends on the LLM.
+and existing topic names presented as new. A label cannot appear both in an existing
+assignment and a new topic. Topic names may differ only by case or spacing when
+selecting an existing topic; their stored spelling is preserved. Semantic equivalence
+of topic names still depends on the LLM.
 
-All three stages are staged in memory and committed together per review. A failed
-assignment or creation leaves the earlier tree and reviews intact. The existing
+Label discovery and combined placement are staged in memory and committed together
+per review. Invalid placement leaves the earlier tree and reviews intact. The
 single-process lock, source-order checks, raw request/response records and token
 logging also apply. Resuming skips completed reviews; it may repeat the unfinished
-review's calls. Switching modes or prompts requires a new output directory. Old
-flat pilot results are not migrated, overwritten or rerun automatically.
+review's calls. Optimized tree mode uses checkpoint format 4, rejecting the previous
+three-stage tree checkpoints. Use a new output directory; old pilot results are
+not migrated, overwritten or rerun automatically. Flat mode retains its existing
+request layout and checkpoint behavior.
 
 `state.json` adds `topic_label_tree`. Each review records its selected `topic_labels`,
 new-label `topic_assignments` into existing topics, and any `new_topics` it created.
 On completion, `topic_label_tree.json` and `topics_by_review.json` are exported,
 alongside the original flat label exports. Only consume exports when the checkpoint
-says `completed`. The new stage prompts are English YAML files in `prompts/`:
-`assign_label_topics.yaml` and `create_label_topics.yaml`; CLI overrides are
-`--assign-topics-prompt` and `--create-topics-prompt`. Compute settings remain in
-`quest_computes/incremental_review_labels.json`.
+says `completed`.
+
+English YAML prompts in `prompts/` are now:
+- `topic_tree_context.yaml`: common prefix and complete taxonomy presentation;
+  override with `--tree-context-prompt`.
+- `tree_review_labels.yaml`: default tree-mode label generation prompt;
+  override with `--prompt`. Flat mode still defaults to `incremental_review_labels.yaml`.
+- `place_label_topics.yaml`: combined existing/new topic placement;
+  override with `--place-topics-prompt`.
+
+The former `--assign-topics-prompt` and `--create-topics-prompt` flags and separate
+stage templates have been replaced by the combined placement prompt. Compute
+settings remain in `quest_computes/incremental_review_labels.json`.
