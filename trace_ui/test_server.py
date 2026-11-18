@@ -1,9 +1,10 @@
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
 
-from server import read_events, trace_path, summary_detail, LabelResults
+from server import read_events, trace_path, summary_detail, original_detail, LabelResults
 
 
 class TraceTests(unittest.TestCase):
@@ -63,6 +64,43 @@ class TraceTests(unittest.TestCase):
             (paper / 'status.json').write_text('{"status":"failed"}')
             with self.assertRaises(ValueError):
                 summary_detail(root, 'paper_0001')
+
+    def test_original_sources_match_summary_hash_and_stay_in_allowed_roots(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            summaries = root / 'summaries'
+            paper = summaries / 'paper_0001'
+            paper.mkdir(parents=True)
+            (paper / 'status.json').write_text('{"status":"completed"}')
+            ai_root = root / 'ai'
+            ai = ai_root / 'run/paper_0001/response.txt'
+            ai.parent.mkdir(parents=True)
+            ai.write_text('Original AI audit.\n')
+            database = root / 'database'
+            human = database / 'paper_0001/human_reviews/reviews.json'
+            human.parent.mkdir(parents=True)
+            human.write_text(json.dumps({'kind': 'bmc_peer_review_reports', 'parts': {'assets': [
+                {'label': 'ReviewerReport_V0_R1', 'text': 'Full reviewer text.\n'},
+                {'label': 'AuthorResponse', 'text': 'Not the selected review'}]}}))
+            items = []
+            for name, kind, doc, text in [('00_ai_final', 'ai', 'ai_final', ai.read_text()),
+                                          ('01_ReviewerReport_V0_R1', 'human', 'ReviewerReport_V0_R1', 'Full reviewer text.\n')]:
+                (paper / (name + '.txt')).write_text('- Summary.\n')
+                items.append({'file': name + '.txt', 'source': {'kind': kind, 'document': doc},
+                              'source_sha256': hashlib.sha256(text.encode()).hexdigest()})
+            metadata = {'ai_response': str(ai), 'summaries': items}
+            (paper / 'metadata.json').write_text(json.dumps(metadata))
+            self.assertEqual(original_detail(summaries, 'paper_0001', 'paper_0001::00_ai_final', database, ai_root)['text'], ai.read_text())
+            self.assertEqual(original_detail(summaries, 'paper_0001', 'paper_0001::01_ReviewerReport_V0_R1', database, ai_root)['text'], 'Full reviewer text.\n')
+            with self.assertRaisesRegex(ValueError, 'Unknown review'):
+                original_detail(summaries, 'paper_0001', '../secret', database, ai_root)
+            ai.write_text('Changed audit')
+            with self.assertRaisesRegex(ValueError, 'differs'):
+                original_detail(summaries, 'paper_0001', 'paper_0001::00_ai_final', database, ai_root)
+            metadata['ai_response'] = str(root / 'outside/response.txt')
+            (paper / 'metadata.json').write_text(json.dumps(metadata))
+            with self.assertRaisesRegex(ValueError, 'Invalid original AI'):
+                original_detail(summaries, 'paper_0001', 'paper_0001::00_ai_final', database, ai_root)
 
     def test_labels_match_review_ids_and_refresh_atomic_checkpoint(self):
         with tempfile.TemporaryDirectory() as directory:

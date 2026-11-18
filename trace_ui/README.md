@@ -83,3 +83,10 @@ by checkpoint inode, modification time and size, and returns only the selected
 paper's saved label records through `/api/labels?paper=paper_0001`; raw prompts,
 API records and the full checkpoint are not sent to the browser. Partial runs
 remain browsable. Missing label results do not prevent reading summaries.
+
+Each summary card includes an expandable original-source view and text download.
+AI originals resolve from summary metadata into review_pipeline/results; Human
+originals match the selected source document in paper_database. Original text is
+loaded on demand and checked against the summary source SHA256 when available.
+Mixed peer-review histories are explicitly marked, including author-response
+fallback documents. Originals are plain text and not silently truncated.

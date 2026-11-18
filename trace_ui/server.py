@@ -1,5 +1,6 @@
 """Local, dependency-free viewer for append-only agent trajectories."""
 import argparse
+import hashlib
 import json
 import re
 import threading
@@ -10,6 +11,8 @@ from urllib.parse import parse_qs, urlsplit
 ASSETS = Path(__file__).resolve().parent
 DEFAULT_ROOT = ASSETS.parent / 'trace_databases'
 DEFAULT_SUMMARIES = ASSETS.parent / 'discritized_summary/results/deepseek_discretization_20261103'
+DEFAULT_DATABASE = ASSETS.parent / 'paper_database'
+DEFAULT_AI_RESULTS = ASSETS.parent / 'review_pipeline/results'
 DEFAULT_LABELS = ASSETS.parent / 'signal_extraction_pipeline/results/topic_labels_ai_human_full_20261118/state.json'
 
 
@@ -62,6 +65,53 @@ def summary_detail(root, paper):
     return {'paper': paper, 'sections': sections}
 
 
+def original_detail(root, paper, review_id, database=DEFAULT_DATABASE, ai_results=DEFAULT_AI_RESULTS):
+    sections = summary_detail(root, paper)['sections']
+    section = next((row for row in sections if row['review_id'] == review_id), None)
+    if section is None:
+        raise ValueError('Unknown review')
+    metadata = json.loads((root / paper / 'metadata.json').read_text())
+    item = next(row for row in metadata['summaries']
+                if f"{paper}::{Path(row['file']).stem}" == review_id)
+    note = ''
+    if section['kind'] == 'ai':
+        path = Path(metadata['ai_response']).resolve()
+        if not path.is_relative_to(ai_results.resolve()) or path.name != 'response.txt' or path.parent.name != paper:
+            raise ValueError('Invalid original AI response path')
+        text = path.read_text(encoding='utf-8')
+    elif section['kind'] == 'human':
+        path = (database / paper / 'human_reviews/reviews.json').resolve()
+        if not path.is_relative_to(database.resolve()):
+            raise ValueError('Invalid original review path')
+        data = json.loads(path.read_text())
+        parts = data.get('parts', {})
+        document = section['document']
+        if data.get('kind') == 'bmc_peer_review_reports' and document.startswith('ReviewerReport_'):
+            matches = [a.get('text') for a in parts.get('assets', []) if a.get('label') == document]
+            if len(matches) != 1:
+                raise ValueError('Original reviewer document is missing or ambiguous')
+            text = matches[0]
+        elif data.get('kind') == 'elife_public_reviews' and document in (
+                'public_reviews', 'reviewer_comments_quoted_in_author_response'):
+            text = parts.get('public_reviews' if document == 'public_reviews' else 'author_response')
+            if document == 'reviewer_comments_quoted_in_author_response':
+                note = 'Source history includes author responses; the summary extracts reviewer comments.'
+        elif data.get('kind') in ('plos_peer_review_history', 'bmj_open_peer_review_history') and document == 'peer_review_history':
+            text = parts.get('peer_review_history')
+            note = 'Original peer-review history may include author replies and editorial material.'
+        else:
+            raise ValueError('Unsupported original reviewer document')
+    else:
+        raise ValueError('Unsupported review kind')
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError('Original review text is empty')
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    if item.get('source_sha256') and item['source_sha256'] != digest:
+        raise ValueError('Original source differs from the text used for this summary')
+    return {'review_id': review_id, 'kind': section['kind'], 'document': section['document'],
+            'text': text, 'note': note, 'source_sha256': digest}
+
+
 class LabelResults:
     def __init__(self, path):
         self.path = Path(path)
@@ -102,7 +152,11 @@ def handler_for(root, summaries_root=DEFAULT_SUMMARIES, labels_state=DEFAULT_LAB
         def do_GET(self):
             url = urlsplit(self.path)
             try:
-                if url.path == '/api/labels':
+                if url.path == '/api/original':
+                    query = parse_qs(url.query)
+                    self.send_json(original_detail(summaries_root, query.get('paper', [''])[0],
+                                                   query.get('review', [''])[0]))
+                elif url.path == '/api/labels':
                     query = parse_qs(url.query)
                     self.send_json(labels.detail(query.get('paper', [''])[0]))
                 elif url.path == '/api/summaries':

@@ -52,7 +52,43 @@ function renderSection(section) {
   labelCards.set(section.review_id, topics);
   const summaryHeading = document.createElement('h5');
   summaryHeading.textContent = 'Review summary';
-  card.append(title, topics, summaryHeading, list);
+  const original = document.createElement('details');
+  original.className = 'original-review';
+  const toggle = document.createElement('summary');
+  toggle.textContent = section.kind === 'ai' ? 'View original AI audit' : 'View original Human review';
+  const body = document.createElement('div');
+  original.append(toggle, body);
+  let loaded = false, loading = false;
+  original.addEventListener('toggle', async () => {
+    if (!original.open || loaded || loading) return;
+    loading = true;
+    body.textContent = 'Loading original text…';
+    try {
+      const data = await get(`/api/original?paper=${encodeURIComponent(selected)}&review=${encodeURIComponent(section.review_id)}`);
+      body.replaceChildren();
+      if (data.note) {
+        const note = document.createElement('p');
+        note.className = 'source-note';
+        note.textContent = data.note;
+        body.append(note);
+      }
+      const download = document.createElement('button');
+      download.textContent = 'Download original text';
+      download.onclick = () => {
+        const url = URL.createObjectURL(new Blob([data.text], {type: 'text/plain;charset=utf-8'}));
+        const link = document.createElement('a');
+        link.href = url; link.download = `${section.review_id.replace('::', '_')}_original.txt`; link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      };
+      const text = document.createElement('pre');
+      text.textContent = data.text;
+      body.append(download, text);
+      loaded = true;
+    } catch (error) {
+      body.textContent = `Could not load original text: ${error.message}. Close and reopen to retry.`;
+    } finally { loading = false; }
+  });
+  card.append(title, topics, original, summaryHeading, list);
   el(section.kind === 'ai' ? 'ai' : 'human').append(card);
 }
 function renderLabels(data) {
