@@ -149,3 +149,51 @@ coverage rely on the LLM prompt, so review order can affect the resulting domain
 This route does not automatically start experiments or backfill old reviews.
 
 Offline tests: `python3 -m unittest signal_extraction_pipeline.test_incremental`.
+
+## Incremental topic-label tree
+
+Add `--topic-tree` to the incremental entry point to grow a two-level tree from
+empty, without changing the flat-label mode:
+
+```sh
+python3 signal_extraction_pipeline/run_incremental.py \
+  --input /path/to/completed/summary/run --topic-tree --dry-run
+```
+
+This command only validates inputs. Remove `--dry-run` to make API calls in a later
+experiment. Tree mode uses a separate default output directory,
+`signal_extraction_pipeline/results/incremental_topic_tree`.
+
+Each review follows this exact order:
+1. Select existing labels and generate any missing labels, with the complete
+   current tree and all existing labels in context.
+2. Assign new labels to existing topics; explicitly return labels with no fit.
+3. Group those remaining labels into newly created topics.
+
+If the tree is empty, step 2 is unnecessary. If there are no new labels, both
+placement steps are skipped. If all new labels fit existing topics, step 3 is
+skipped. Every actual request includes the full review and complete current tree;
+no retrieval, pruning or silent truncation is used. The same input-byte guard
+applies to every stage. An oversized context stops processing.
+
+Each label has exactly one parent topic. Reused labels keep that parent. Validators
+reject unknown topic/label names, duplicate placement, missing labels, empty topics
+and existing topic names presented as new. Topic names may differ only by case or
+spacing when selecting an existing topic; their stored spelling is preserved.
+Semantic equivalence of topic names still depends on the LLM.
+
+All three stages are staged in memory and committed together per review. A failed
+assignment or creation leaves the earlier tree and reviews intact. The existing
+single-process lock, source-order checks, raw request/response records and token
+logging also apply. Resuming skips completed reviews; it may repeat the unfinished
+review's calls. Switching modes or prompts requires a new output directory. Old
+flat pilot results are not migrated, overwritten or rerun automatically.
+
+`state.json` adds `topic_label_tree`. Each review records its selected `topic_labels`,
+new-label `topic_assignments` into existing topics, and any `new_topics` it created.
+On completion, `topic_label_tree.json` and `topics_by_review.json` are exported,
+alongside the original flat label exports. Only consume exports when the checkpoint
+says `completed`. The new stage prompts are English YAML files in `prompts/`:
+`assign_label_topics.yaml` and `create_label_topics.yaml`; CLI overrides are
+`--assign-topics-prompt` and `--create-topics-prompt`. Compute settings remain in
+`quest_computes/incremental_review_labels.json`.

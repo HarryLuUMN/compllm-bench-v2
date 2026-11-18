@@ -17,19 +17,28 @@ from signal_extraction_pipeline.incremental import load_reviews, run_incremental
 def main():
     parser = argparse.ArgumentParser(description='Assign review labels while growing a shared label space from zero.')
     parser.add_argument('--input', type=Path, required=True, help='Completed summary run directory or a JSON array of reviews')
-    parser.add_argument('--output', type=Path, default=ROOT / 'signal_extraction_pipeline/results/incremental')
+    parser.add_argument('--output', type=Path, default=None)
     parser.add_argument('--config', type=Path, default=ROOT / 'quest_computes/incremental_review_labels.json')
     parser.add_argument('--prompt', type=Path, default=ROOT / 'prompts/incremental_review_labels.yaml')
     parser.add_argument('--env', type=Path, default=ROOT / '.env')
+    parser.add_argument('--topic-tree', action='store_true', help='Group new labels into existing or newly created topics')
+    parser.add_argument('--assign-topics-prompt', type=Path, default=ROOT / 'prompts/assign_label_topics.yaml')
+    parser.add_argument('--create-topics-prompt', type=Path, default=ROOT / 'prompts/create_label_topics.yaml')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
+    if args.output is None:
+        args.output = ROOT / 'signal_extraction_pipeline/results' / (
+            'incremental_topic_tree' if args.topic_tree else 'incremental')
     reviews = load_reviews(args.input)
     config = json.loads(args.config.read_text())
     if any(type(config.get(k)) is not int or config[k] < 1 for k in ('max_tokens', 'timeout', 'max_input_bytes')):
         raise ValueError('Token, timeout and input budgets must be positive integers')
     prompt = load_prompt(args.prompt)
-    if '{{input}}' not in prompt['task']:
-        raise ValueError('Prompt must contain {{input}}')
+    topic_prompts = {'assign': load_prompt(args.assign_topics_prompt),
+                     'create': load_prompt(args.create_topics_prompt)} if args.topic_tree else None
+    for template in [prompt, *(topic_prompts or {}).values()]:
+        if '{{input}}' not in template['task']:
+            raise ValueError('Prompt must contain {{input}}')
     if args.dry_run:
         print(json.dumps({'reviews': len(reviews), 'api_calls': 0}))
         return
@@ -57,9 +66,11 @@ def main():
                 raise ValueError('LLM returned no labels')
             return text
 
-        state = run_incremental(reviews, args.output, prompt, config, complete)
-    print(json.dumps({'status': state['status'], 'reviews': len(state['reviews']),
-                      'labels': len(state['label_space'])}))
+        state = run_incremental(reviews, args.output, prompt, config, complete, topic_prompts=topic_prompts)
+    summary = {'status': state['status'], 'reviews': len(state['reviews']), 'labels': len(state['label_space'])}
+    if args.topic_tree:
+        summary['topics'] = len(state['topic_label_tree'])
+    print(json.dumps(summary))
 
 
 if __name__ == '__main__':

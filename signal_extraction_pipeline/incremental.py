@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from signal_extraction_pipeline.core import cache_key, messages, write_json
+from signal_extraction_pipeline.topic_tree import extend_tree, validate_tree
 
 
 def load_reviews(path):
@@ -56,15 +57,22 @@ def validate_labels(answer, label_space):
     return existing, new
 
 
-def run_incremental(reviews, output, prompt, configuration, complete):
+def run_incremental(reviews, output, prompt, configuration, complete, topic_prompts=None):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     checkpoint = output / 'state.json'
-    fingerprint = cache_key({'prompt': prompt, 'configuration': configuration, 'format': 2})
+    settings = {'prompt': prompt, 'configuration': configuration, 'format': 2}
+    if topic_prompts is not None:
+        settings.update(format=3, topic_prompts=topic_prompts)
+    fingerprint = cache_key(settings)
     state = json.loads(checkpoint.read_text()) if checkpoint.exists() else {
         'fingerprint': fingerprint, 'configuration': configuration, 'label_space': [], 'reviews': []}
     if state['fingerprint'] != fingerprint:
         raise ValueError('Configuration or prompt changed; use a new output directory')
+    if topic_prompts is not None:
+        if not checkpoint.exists():
+            state['topic_label_tree'] = {}
+        validate_tree(state['topic_label_tree'], state['label_space'])
     done = state['reviews']
     if len(reviews) < len(done) or any(record['input_sha256'] != cache_key(review)
                                      for record, review in zip(done, reviews)):
@@ -73,7 +81,10 @@ def run_incremental(reviews, output, prompt, configuration, complete):
     write_json(checkpoint, state)
     try:
         for review in reviews[len(done):]:
-            payload = json.dumps({'available_labels': state['label_space'], 'review': review}, ensure_ascii=False)
+            data = {'available_labels': state['label_space'], 'review': review}
+            if topic_prompts is not None:
+                data['topic_label_tree'] = state['topic_label_tree']
+            payload = json.dumps(data, ensure_ascii=False)
             request = messages(prompt, 'input', payload)
             if len(json.dumps(request, ensure_ascii=False).encode('utf-8')) > configuration['max_input_bytes']:
                 raise ValueError('Review plus full label space exceeds input budget; no text was truncated')
@@ -85,11 +96,23 @@ def run_incremental(reviews, output, prompt, configuration, complete):
                           labels=existing + new,
                           classification_corrected=(existing != proposed['existing_labels']
                                                     or new != proposed['new_labels']))
+            if topic_prompts is not None:
+                tree, assigned, created = extend_tree(state['topic_label_tree'], new, review,
+                                                      topic_prompts, configuration, complete)
+                validate_tree(tree, state['label_space'] + new)
+                record.update(topic_assignments=assigned, new_topics=created,
+                              topic_labels={topic: [label for label in record['labels'] if label in group]
+                                            for topic, group in tree.items()
+                                            if any(label in group for label in record['labels'])})
+                state['topic_label_tree'] = tree
             state['reviews'].append(record)
             state['label_space'].extend(new)
             write_json(checkpoint, state)
         write_json(output / 'label_space.json', state['label_space'])
         write_json(output / 'labels_by_review.json', {r['review_id']: r['labels'] for r in state['reviews']})
+        if topic_prompts is not None:
+            write_json(output / 'topic_label_tree.json', state['topic_label_tree'])
+            write_json(output / 'topics_by_review.json', {r['review_id']: r['topic_labels'] for r in state['reviews']})
         state['status'] = 'completed'
         write_json(checkpoint, state)
     except Exception:
