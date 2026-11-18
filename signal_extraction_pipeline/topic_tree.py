@@ -23,12 +23,18 @@ def validate_placement(answer, labels, tree):
         raise ValueError('Topic assignments must be an array')
     assigned = {}
     for item in answer['assignments']:
-        if not isinstance(item, dict) or set(item) != {'label', 'topic'}:
+        if not isinstance(item, dict) or set(item) not in ({'label', 'topic'}, {'label', 'topic_id'}):
             raise ValueError('Each assignment requires a label and topic')
         label = canonical(item['label'], labels, 'label')
         if label in assigned:
             raise ValueError('A label can only be assigned once')
-        assigned[label] = canonical(item['topic'], tree, 'topic')
+        if 'topic_id' in item:
+            index = item['topic_id']
+            if type(index) is not int or not 0 <= index < len(tree):
+                raise ValueError('Unknown topic ID')
+            assigned[label] = list(tree)[index]
+        else:
+            assigned[label] = canonical(item['topic'], tree, 'topic')
     remaining = [label for label in labels if label not in assigned]
     groups = validate_new_topics({'new_topics': answer['new_topics']}, remaining, tree)
     return assigned, groups
@@ -88,33 +94,49 @@ def tree_messages(context_prompt, stage_prompt, tree, payload):
     return prefix + [{'role': 'user', 'content': '\n\n'.join(part['content'] for part in stage)}]
 
 
+def complete_topic_stage(request, validate, prompt, configuration, complete):
+    request = request[:]
+    for attempt in range(3):
+        if len(json.dumps(request, ensure_ascii=False).encode('utf-8')) > configuration['max_input_bytes']:
+            raise ValueError('Topic stage exceeds input budget; no text was truncated')
+        response = complete(request)
+        try:
+            return validate(json.loads(response))
+        except ValueError as error:
+            if attempt == 2:
+                raise
+            request += [{'role': 'assistant', 'content': response},
+                        {'role': 'user', 'content': prompt['repair'].replace('{{error}}', str(error))}]
+
+
 def select_topics(tree, review, prompts, configuration, complete):
     if not tree:
         return []
-    request = tree_messages(prompts['context'], prompts['select'], [{'id': i, 'topic': name} for i, name in enumerate(tree)], {'review': review})
-    if len(json.dumps(request, ensure_ascii=False).encode('utf-8')) > configuration['max_input_bytes']:
-        raise ValueError('Topic selection exceeds input budget; no text was truncated')
-    answer = json.loads(complete(request))
-    if not isinstance(answer, dict) or set(answer) != {'selected_topic_ids'} or not isinstance(answer['selected_topic_ids'], list):
-        raise ValueError('Expected selected_topic_ids array')
-    ids = answer['selected_topic_ids']
-    names = list(tree)
-    if any(type(i) is not int or not 0 <= i < len(names) for i in ids):
-        raise ValueError('Unknown topic ID')
-    if len(set(ids)) != len(ids):
-        raise ValueError('Duplicate selected topics')
-    selected = [names[i] for i in ids]
-    return selected
+    request = tree_messages(prompts['context'], prompts['select'],
+                            [{'id': i, 'topic': name} for i, name in enumerate(tree)], {'review': review})
+    def validate(answer):
+        if not isinstance(answer, dict) or set(answer) != {'selected_topic_ids'} or not isinstance(answer['selected_topic_ids'], list):
+            raise ValueError('Expected selected_topic_ids array')
+        ids = answer['selected_topic_ids']
+        names = list(tree)
+        if any(type(i) is not int or not 0 <= i < len(names) for i in ids):
+            raise ValueError('Unknown topic ID')
+        return [names[i] for i in dict.fromkeys(ids)]
+    return complete_topic_stage(request, validate, prompts['select'], configuration, complete)
 
 
 def extend_tree(tree, new_labels, prompts, configuration, complete):
     updated = {topic: labels[:] for topic, labels in tree.items()}
     if not new_labels:
         return updated, {}, {}
-    request = tree_messages(prompts['context'], prompts['place'], list(tree) if 'select' in prompts else tree, {'new_labels': new_labels})
+    request = tree_messages(prompts['context'], prompts['place'], [{'id': i, 'topic': name} for i, name in enumerate(tree)] if 'select' in prompts else tree, {'new_labels': new_labels})
     if len(json.dumps(request, ensure_ascii=False).encode('utf-8')) > configuration['max_input_bytes']:
         raise ValueError('New labels plus full topic-label tree exceeds input budget; no text was truncated')
-    assigned, groups = validate_placement(json.loads(complete(request)), new_labels, tree)
+    if 'select' in prompts:
+        assigned, groups = complete_topic_stage(request, lambda answer: validate_placement(answer, new_labels, tree),
+                                                prompts['place'], configuration, complete)
+    else:
+        assigned, groups = validate_placement(json.loads(complete(request)), new_labels, tree)
     for label, topic in assigned.items():
         updated[topic].append(label)
     updated.update(groups)

@@ -13,3 +13,9 @@ system: |
 task: |
   Choose the relevant topics for this review:
   {{input}}
+repair: |
+  Your last response failed validation: {{error}}
+  Return a corrected JSON object using the original input and supplied topic IDs.
+  Use only valid existing IDs for existing topics. New topics belong only in
+  new_topics, never in assignments. Do not omit labels or give one label multiple
+  parents. Return JSON only; do not change the input labels.

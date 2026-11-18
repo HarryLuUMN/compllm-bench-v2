@@ -256,3 +256,9 @@ space are canonicalized to prevent duplicate names outside selected topics.
 Each review records selected_topics; raw requests and usage remain in attempts.
 This is format 5; legacy checkpoints require an explicit backed-up migration that
 preserves completed reviews and records the old fingerprint.
+
+Topic selection deduplicates repeated valid IDs in first-occurrence order. Topic
+placement uses bounded topic IDs, resolved back to canonical names before saving.
+Invalid topic-stage JSON or assignments receive validation feedback for at most
+two correction calls. These calls are recorded with usage like other attempts;
+input budgets and single-parent/full-label coverage checks remain enforced.
