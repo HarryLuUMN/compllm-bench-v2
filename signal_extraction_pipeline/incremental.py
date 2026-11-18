@@ -37,7 +37,8 @@ def validate_labels(answer, label_space):
     if not isinstance(answer, dict) or set(answer) != {'existing_labels', 'new_labels'}:
         raise ValueError('Expected existing_labels and new_labels arrays')
     used = set()
-    normalized_space = {' '.join(label.casefold().split()) for label in label_space}
+    normalized_space = {' '.join(label.casefold().split()): label for label in label_space}
+    existing, new = [], []
     for key in ('existing_labels', 'new_labels'):
         if not isinstance(answer[key], list):
             raise ValueError(f'{key} must be an array')
@@ -47,19 +48,19 @@ def validate_labels(answer, label_space):
             normalized = ' '.join(label.casefold().split())
             if normalized in used:
                 raise ValueError('Duplicate labels in model output')
-            if key == 'existing_labels' and label not in label_space:
-                raise ValueError('Selected existing label is not in the shared space')
-            if key == 'new_labels' and normalized in normalized_space:
-                raise ValueError('New label already exists in the shared space')
+            if normalized in normalized_space:
+                existing.append(normalized_space[normalized])
+            else:
+                new.append(label)
             used.add(normalized)
-    return answer['existing_labels'], answer['new_labels']
+    return existing, new
 
 
 def run_incremental(reviews, output, prompt, configuration, complete):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     checkpoint = output / 'state.json'
-    fingerprint = cache_key({'prompt': prompt, 'configuration': configuration, 'format': 1})
+    fingerprint = cache_key({'prompt': prompt, 'configuration': configuration, 'format': 2})
     state = json.loads(checkpoint.read_text()) if checkpoint.exists() else {
         'fingerprint': fingerprint, 'configuration': configuration, 'label_space': [], 'reviews': []}
     if state['fingerprint'] != fingerprint:
@@ -77,10 +78,13 @@ def run_incremental(reviews, output, prompt, configuration, complete):
             if len(json.dumps(request, ensure_ascii=False).encode('utf-8')) > configuration['max_input_bytes']:
                 raise ValueError('Review plus full label space exceeds input budget; no text was truncated')
             response = complete(request)
-            existing, new = validate_labels(json.loads(response), state['label_space'])
+            proposed = json.loads(response)
+            existing, new = validate_labels(proposed, state['label_space'])
             record = {k: v for k, v in review.items() if k != 'text'}
             record.update(input_sha256=cache_key(review), existing_labels=existing, new_labels=new,
-                          labels=existing + new)
+                          labels=existing + new,
+                          classification_corrected=(existing != proposed['existing_labels']
+                                                    or new != proposed['new_labels']))
             state['reviews'].append(record)
             state['label_space'].extend(new)
             write_json(checkpoint, state)

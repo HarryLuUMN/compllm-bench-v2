@@ -40,7 +40,7 @@ class IncrementalTests(unittest.TestCase):
     def test_invalid_output_does_not_add_labels_and_resumes_failed_review(self):
         reviews = [{'review_id': '1', 'text': 'First'}, {'review_id': '2', 'text': 'Second'}]
         with tempfile.TemporaryDirectory() as directory:
-            responses = iter([answer(new=['data leakage']), answer(['unknown'])])
+            responses = iter([answer(new=['data leakage']), answer(new=['duplicate', 'duplicate'])])
             with self.assertRaises(ValueError):
                 run_incremental(reviews, directory, PROMPT, CONFIG, lambda _: next(responses))
             state = json.loads((Path(directory) / 'state.json').read_text())
@@ -50,13 +50,17 @@ class IncrementalTests(unittest.TestCase):
             state = run_incremental(reviews, directory, PROMPT, CONFIG, lambda _: answer(['data leakage']))
             self.assertEqual(len(state['reviews']), 2)
 
-    def test_rejects_new_duplicates_unknown_existing_and_wrong_schema(self):
-        for value in [{'existing_labels': [], 'new_labels': ['DATA  LEAKAGE']},
-                      {'existing_labels': ['missing'], 'new_labels': []},
-                      {'existing_labels': [], 'new_labels': ['small sample', 'SMALL SAMPLE']},
+    def test_rejects_duplicate_labels_and_wrong_schema(self):
+        for value in [{'existing_labels': [], 'new_labels': ['small sample', 'SMALL SAMPLE']},
                       {'existing_labels': 'data leakage', 'new_labels': []}, {}]:
             with self.assertRaises(ValueError):
                 validate_labels(value, ['data leakage'])
+
+    def test_classifies_labels_by_actual_space_not_model_field(self):
+        existing, new = validate_labels({'existing_labels': ['insufficient methodological detail'],
+                                        'new_labels': ['DATA LEAKAGE']}, ['data leakage'])
+        self.assertEqual(existing, ['data leakage'])
+        self.assertEqual(new, ['insufficient methodological detail'])
 
     def test_changed_input_or_configuration_cannot_reuse_checkpoint(self):
         reviews = [{'review_id': '1', 'text': 'First'}]

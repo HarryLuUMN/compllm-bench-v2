@@ -141,8 +141,10 @@ input-byte guard; overflow fails instead of truncating or dropping existing labe
 On completion, `label_space.json` and `labels_by_review.json` are exported. Check
 that `state.json` says `completed` before consuming exports. API attempts save full
 requests, responses and provider token usage without credentials. Interrupted API
-calls may need to be repeated if their checkpoint was not written. Exact/case/space
-duplicates and unknown existing labels are rejected; semantic synonym avoidance and
+calls may need to be repeated if their checkpoint was not written. Duplicate labels are rejected after case/space normalization. Reuse versus new
+is determined by actual membership in the current space, even if the model puts a
+label in the wrong array; existing spellings are preserved and corrections are
+flagged in the checkpoint. Raw responses retain the original grouping; semantic synonym avoidance and
 coverage rely on the LLM prompt, so review order can affect the resulting domain.
 This route does not automatically start experiments or backfill old reviews.
 
