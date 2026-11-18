@@ -36,7 +36,7 @@ argument. Set `TRACE_LOCAL_PORT` or `TRACE_REMOTE_PORT` to use different ports.
 Both endpoints bind to localhost. Closing the connection stops the remote viewer;
 the review experiment continues independently. Re-run the command to reconnect.
 The connection requires the existing Quest SSH key and remote Python runtime.
-It copies only the viewer's four source assets, without modifying any traces.
+It copies only the viewer's seven source assets, without modifying any traces.
 
 ## GitHub Pages
 
@@ -68,3 +68,18 @@ The default dataset is `discritized_summary/results/deepseek_discretization_2026
 under the viewer's repository. Override it with `--summaries-root /path/to/run`.
 The Quest connection copies viewer assets only; summary text is fetched on demand
 through the same SSH tunnel. Static trace exports keep their existing trace-only UI.
+
+The summary browser also shows each review's topics and labels above its summary.
+AI and individual Human review results match by the summary file's review ID.
+Pending reviews are shown explicitly; completed reviews without problem labels
+are distinguished from reviews still waiting to be processed. Use Refresh labels,
+or leave the page visible for a 30-second refresh from the current checkpoint.
+The status line reports the saved run status and checkpoint time.
+
+The default label checkpoint is
+`signal_extraction_pipeline/results/topic_labels_ai_human_full_20261118/state.json`.
+Override it with `--labels-state /path/to/state.json`. The server caches an index
+by checkpoint inode, modification time and size, and returns only the selected
+paper's saved label records through `/api/labels?paper=paper_0001`; raw prompts,
+API records and the full checkpoint are not sent to the browser. Partial runs
+remain browsable. Missing label results do not prevent reading summaries.

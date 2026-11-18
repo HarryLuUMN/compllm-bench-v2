@@ -1,5 +1,7 @@
 let papers = [], filtered = [], selected = '', visible = 100, current = null, request = null;
 const el = id => document.getElementById(id);
+let labelRequest = null;
+const labelCards = new Map();
 async function get(url, signal) {
   const response = await fetch(url, {signal});
   const data = await response.json();
@@ -44,8 +46,70 @@ function renderSection(section) {
     item.textContent = line.trim().replace(/^-\s+/, '');
     list.append(item);
   }
-  card.append(title, list);
+  const topics = document.createElement('div');
+  topics.className = 'review-labels';
+  topics.textContent = 'Loading topics and labels…';
+  labelCards.set(section.review_id, topics);
+  const summaryHeading = document.createElement('h5');
+  summaryHeading.textContent = 'Review summary';
+  card.append(title, topics, summaryHeading, list);
   el(section.kind === 'ai' ? 'ai' : 'human').append(card);
+}
+function renderLabels(data) {
+  const records = new Map(data.reviews.map(row => [row.review_id, row]));
+  for (const [id, container] of labelCards) {
+    container.replaceChildren();
+    const row = records.get(id);
+    if (!data.available || !row) {
+      container.textContent = data.available ? 'Pending · this review has not been labeled yet.' : 'Topic-label results are not available.';
+      container.classList.add('pending');
+      continue;
+    }
+    container.classList.remove('pending');
+    const heading = document.createElement('h5');
+    heading.textContent = `Topics and labels · ${row.labels.length} labels`;
+    container.append(heading);
+    if (!row.labels.length) {
+      const empty = document.createElement('p');
+      empty.textContent = 'Completed · no problem labels assigned.';
+      container.append(empty);
+    }
+    for (const [topic, labels] of Object.entries(row.topic_labels)) {
+      const group = document.createElement('div');
+      group.className = 'topic-group';
+      const title = document.createElement('h6');
+      title.textContent = topic;
+      const chips = document.createElement('ul');
+      chips.className = 'label-chips';
+      for (const label of labels) {
+        const chip = document.createElement('li');
+        chip.textContent = label;
+        chip.title = row.new_labels.includes(label) ? 'New label created for this review' : 'Reused existing label';
+        chips.append(chip);
+      }
+      group.append(title, chips);
+      container.append(group);
+    }
+  }
+  const done = data.reviews.filter(row => labelCards.has(row.review_id)).length;
+  el('label-state').textContent = data.available
+    ? `Topic-label results · ${done}/${labelCards.size} reviews labeled for this paper · ${data.processed_reviews.toLocaleString()} reviews saved across the dataset · run ${data.status} · updated ${new Date(data.updated_at * 1000).toLocaleString()}`
+    : 'Topic-label results are not available for this dataset.';
+}
+async function refreshLabels() {
+  if (!current) return;
+  const paper = current.paper;
+  labelRequest?.abort();
+  labelRequest = new AbortController();
+  el('refresh-labels').disabled = true;
+  try {
+    const data = await get(`/api/labels?paper=${encodeURIComponent(paper)}`, labelRequest.signal);
+    if (selected === paper) renderLabels(data);
+  } catch (error) {
+    if (error.name !== 'AbortError' && selected === paper) el('label-state').textContent = `Could not refresh topic-label results: ${error.message}`;
+  } finally {
+    if (selected === paper) el('refresh-labels').disabled = false;
+  }
 }
 async function selectPaper() {
   const paper = location.hash.slice(1);
@@ -55,9 +119,13 @@ async function selectPaper() {
   }
   selected = paper;
   request?.abort();
+  labelRequest?.abort();
+  labelCards.clear();
   request = new AbortController();
   current = null;
   el('download').disabled = true;
+  el('refresh-labels').disabled = true;
+  el('label-state').textContent = 'Loading topics and labels…';
   el('title').textContent = paper;
   el('state').className = '';
   el('state').textContent = 'Loading summaries…';
@@ -70,10 +138,13 @@ async function selectPaper() {
     data.sections.forEach(renderSection);
     el('state').textContent = `DeepSeek summaries · ${data.sections.filter(s => s.kind === 'human').length} human review documents`;
     el('download').disabled = false;
+    await refreshLabels();
   } catch (error) {
     if (error.name !== 'AbortError') { el('state').textContent = error.message; el('state').className = 'error'; }
   }
 }
+el('refresh-labels').onclick = refreshLabels;
+setInterval(() => { if (!document.hidden) refreshLabels(); }, 30000);
 el('search').oninput = () => { visible = 100; renderList(); };
 el('more').onclick = () => { visible += 100; renderList(); };
 el('previous').onclick = () => { location.hash = filtered[filtered.indexOf(selected) - 1]; };

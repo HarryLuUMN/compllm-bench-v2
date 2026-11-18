@@ -2,6 +2,7 @@
 import argparse
 import json
 import re
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -9,6 +10,7 @@ from urllib.parse import parse_qs, urlsplit
 ASSETS = Path(__file__).resolve().parent
 DEFAULT_ROOT = ASSETS.parent / 'trace_databases'
 DEFAULT_SUMMARIES = ASSETS.parent / 'discritized_summary/results/deepseek_discretization_20261103'
+DEFAULT_LABELS = ASSETS.parent / 'signal_extraction_pipeline/results/topic_labels_ai_human_full_20261118/state.json'
 
 
 def trace_path(root, name):
@@ -54,17 +56,56 @@ def summary_detail(root, paper):
         path = (folder / item['file']).resolve()
         if not path.is_relative_to(folder) or path.suffix != '.txt':
             raise ValueError('Invalid summary file')
-        sections.append({'kind': item['source']['kind'], 'document': item['source']['document'],
+        sections.append({'review_id': f'{paper}::{path.stem}',
+                         'kind': item['source']['kind'], 'document': item['source']['document'],
                          'text': path.read_text(encoding='utf-8')})
     return {'paper': paper, 'sections': sections}
 
 
-def handler_for(root, summaries_root=DEFAULT_SUMMARIES):
+class LabelResults:
+    def __init__(self, path):
+        self.path = Path(path)
+        self.signature = None
+        self.papers = {}
+        self.progress = {}
+        self.lock = threading.Lock()
+
+    def detail(self, paper):
+        if not re.fullmatch(r'paper_[0-9]{4}', paper):
+            raise ValueError('Invalid paper ID')
+        with self.lock:
+            if not self.path.exists():
+                return {'paper': paper, 'available': False, 'reviews': []}
+            stat = self.path.stat()
+            signature = (stat.st_ino, stat.st_mtime_ns, stat.st_size)
+            if signature != self.signature:
+                state = json.loads(self.path.read_text(encoding='utf-8'))
+                papers = {}
+                for record in state['reviews']:
+                    paper_id = record['review_id'].split('::', 1)[0]
+                    row = {'review_id': record['review_id'],
+                           **{key: record.get(key, []) for key in ('labels', 'existing_labels', 'new_labels')},
+                           'topic_labels': record.get('topic_labels', {})}
+                    papers.setdefault(paper_id, []).append(row)
+                self.papers = papers
+                self.progress = {'status': state['status'], 'processed_reviews': len(state['reviews']),
+                                 'label_count': len(state['label_space']),
+                                 'topic_count': len(state['topic_label_tree']), 'updated_at': stat.st_mtime}
+                self.signature = signature
+            return {'paper': paper, 'available': True, **self.progress,
+                    'reviews': self.papers.get(paper, [])}
+
+
+def handler_for(root, summaries_root=DEFAULT_SUMMARIES, labels_state=DEFAULT_LABELS):
+    labels = LabelResults(labels_state)
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             url = urlsplit(self.path)
             try:
-                if url.path == '/api/summaries':
+                if url.path == '/api/labels':
+                    query = parse_qs(url.query)
+                    self.send_json(labels.detail(query.get('paper', [''])[0]))
+                elif url.path == '/api/summaries':
                     papers = sorted(p.name for p in summaries_root.iterdir()
                                     if re.fullmatch(r'paper_[0-9]{4}', p.name)) if summaries_root.exists() else []
                     self.send_json({'papers': papers})
@@ -116,8 +157,9 @@ def main():
     parser.add_argument('--root', type=Path, default=DEFAULT_ROOT)
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--summaries-root', type=Path, default=DEFAULT_SUMMARIES)
+    parser.add_argument('--labels-state', type=Path, default=DEFAULT_LABELS)
     args = parser.parse_args()
-    server = ThreadingHTTPServer(('127.0.0.1', args.port), handler_for(args.root.resolve(), args.summaries_root.resolve()))
+    server = ThreadingHTTPServer(('127.0.0.1', args.port), handler_for(args.root.resolve(), args.summaries_root.resolve(), args.labels_state.resolve()))
     print(f'Trace viewer: http://127.0.0.1:{args.port}', flush=True)
     try:
         server.serve_forever()
