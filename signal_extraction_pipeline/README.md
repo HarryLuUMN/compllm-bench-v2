@@ -106,3 +106,44 @@ embedding quality require configured services and actual audit responses.
 Official model/interface references:
 - https://huggingface.co/Qwen/Qwen3-Embedding-8B
 - https://docs.vllm.ai/en/latest/serving/online_serving/index.html
+
+## Incremental review labels (no clustering)
+
+`run_incremental.py` implements a separate, sequential route: start with an empty
+shared label space; for each complete review, let DeepSeek select existing labels
+and create labels for uncovered major problems. Save that review's combined labels
+and add only its new labels to the space. Earlier reviews are never relabeled.
+AI and human reviews share one space. Each summary document is one review, not one
+review per bullet. Mixed review histories remain one document where upstream data
+has not separated reviewers. Labels describe reported concerns, not verified flaws.
+
+```sh
+python3 signal_extraction_pipeline/run_incremental.py \
+  --input discritized_summary/results/deepseek_discretization_20261103 \
+  --output signal_extraction_pipeline/results/incremental --dry-run
+```
+
+Remove `--dry-run` to invoke the API. Alternatively input a JSON array of records
+with `review_id` and `text` strings, plus optional source/paper metadata. JSON array
+order is preserved; summary directories use sorted paper IDs and metadata document
+order. `.env` supplies `DEEPSEEK_API_KEY`; use `--env` to override. Configuration is
+`quest_computes/incremental_review_labels.json`, with an English YAML prompt at
+`prompts/incremental_review_labels.yaml`. No embedding or tokenizer service is needed.
+
+`state.json` is the authoritative atomic checkpoint, containing the accumulated
+space and each processed review's labels. Restarting skips the processed prefix;
+new reviews can be appended. Changing that prefix, prompt or configuration requires
+another output directory. A single-process lock protects the space. Invalid model
+output stops at the current review without adding labels; validated earlier work
+is retained. The full space and complete review are always sent, with an explicit
+input-byte guard; overflow fails instead of truncating or dropping existing labels.
+
+On completion, `label_space.json` and `labels_by_review.json` are exported. Check
+that `state.json` says `completed` before consuming exports. API attempts save full
+requests, responses and provider token usage without credentials. Interrupted API
+calls may need to be repeated if their checkpoint was not written. Exact/case/space
+duplicates and unknown existing labels are rejected; semantic synonym avoidance and
+coverage rely on the LLM prompt, so review order can affect the resulting domain.
+This route does not automatically start experiments or backfill old reviews.
+
+Offline tests: `python3 -m unittest signal_extraction_pipeline.test_incremental`.

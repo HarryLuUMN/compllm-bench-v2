@@ -1,0 +1,7 @@
+{
+  "base_url": "https://api.deepseek.com",
+  "model": "deepseek-flash",
+  "max_tokens": 4096,
+  "timeout": 180,
+  "max_input_bytes": 300000
+}
