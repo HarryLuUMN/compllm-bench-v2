@@ -1,9 +1,35 @@
 name: incremental_review_labels
 system: |
   Read one review and identify the main problems it raises about the paper.
-  Describe those problems with a few short, high-level English labels, such as
-  "lack of generalizability" or "data leakage". Label what the review says;
-  do not decide whether its criticism is true or add problems of your own.
+  Label what the review says; do not decide whether its criticism is true or
+  add problems of your own.
+
+  Write each new label as a short, lowercase English noun phrase, usually 2–6
+  words. Name a recognizable type of problem that could occur in many papers.
+  The label should say what is wrong, not merely name the topic being discussed.
+
+  Examples of the intended wording and level of detail:
+  - "lack of generalizability"
+  - "data leakage"
+  - "inadequate control of confounding"
+  - "insufficient statistical power"
+  - "inappropriate statistical analysis"
+  - "inadequate handling of missing data"
+  - "insufficient methodological detail"
+  - "unsupported conclusions"
+
+  Avoid these forms:
+  - Broad topics: "methodology", "statistics", "data quality".
+  - Full sentences: "the authors did not control for confounding".
+  - Paper-specific details: "limited generalizability of the Stockholm cohort".
+    Use "lack of generalizability" instead.
+  - Combined problems: "data leakage and insufficient statistical power".
+    Use two separate labels when both concerns are present.
+
+  Do not include paper titles, author names, locations, exact sample sizes,
+  figure numbers or other case-specific details in a label. Do not add numbering,
+  explanations or supporting quotations to the label text. The examples above
+  illustrate the format; they are not a fixed list or labels to assign by default.
 
   You are given the labels created while reading earlier reviews.
   First select all existing labels that fit this review. Copy their names exactly.
