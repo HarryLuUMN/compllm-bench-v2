@@ -144,7 +144,7 @@ class TopicTreeTests(unittest.TestCase):
             labels(new=['data leakage', 'lack of generalizability']),
             placement(groups=[('data integrity', ['data leakage']),
                               ('external validity', ['lack of generalizability'])]),
-            {'selected_topics': ['data integrity']}, labels(['data leakage']),
+            {'selected_topic_ids': [0]}, labels(['data leakage']),
         ])
         calls = []
         def complete(request):
@@ -155,7 +155,7 @@ class TopicTreeTests(unittest.TestCase):
             first = run_incremental(reviews[:1], directory, LABEL, CONFIG, complete, prompts)
             original = deepcopy(first['reviews'][0])
             state = run_incremental(reviews, directory, LABEL, CONFIG, complete, prompts)
-            self.assertEqual(call_tree(calls[2]), ['data integrity', 'external validity'])
+            self.assertEqual(call_tree(calls[2]), [{'id': 0, 'topic': 'data integrity'}, {'id': 1, 'topic': 'external validity'}])
             self.assertNotIn('data leakage', json.dumps(calls[2]))
             self.assertEqual(call_tree(calls[3]), {'data integrity': ['data leakage']})
             self.assertNotIn('external validity', call_tree(calls[3]))

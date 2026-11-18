@@ -91,15 +91,19 @@ def tree_messages(context_prompt, stage_prompt, tree, payload):
 def select_topics(tree, review, prompts, configuration, complete):
     if not tree:
         return []
-    request = tree_messages(prompts['context'], prompts['select'], list(tree), {'review': review})
+    request = tree_messages(prompts['context'], prompts['select'], [{'id': i, 'topic': name} for i, name in enumerate(tree)], {'review': review})
     if len(json.dumps(request, ensure_ascii=False).encode('utf-8')) > configuration['max_input_bytes']:
         raise ValueError('Topic selection exceeds input budget; no text was truncated')
     answer = json.loads(complete(request))
-    if not isinstance(answer, dict) or set(answer) != {'selected_topics'} or not isinstance(answer['selected_topics'], list):
-        raise ValueError('Expected selected_topics array')
-    selected = [canonical(name, tree, 'topic') for name in answer['selected_topics']]
-    if len(set(selected)) != len(selected):
+    if not isinstance(answer, dict) or set(answer) != {'selected_topic_ids'} or not isinstance(answer['selected_topic_ids'], list):
+        raise ValueError('Expected selected_topic_ids array')
+    ids = answer['selected_topic_ids']
+    names = list(tree)
+    if any(type(i) is not int or not 0 <= i < len(names) for i in ids):
+        raise ValueError('Unknown topic ID')
+    if len(set(ids)) != len(ids):
         raise ValueError('Duplicate selected topics')
+    selected = [names[i] for i in ids]
     return selected
 
 
