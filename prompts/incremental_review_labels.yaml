@@ -33,6 +33,12 @@ system: |
 
   You are given the labels created while reading earlier reviews.
   First select all existing labels that fit this review. Copy their names exactly.
+  Only entries in the input's available_labels array count as existing labels.
+  Examples in these instructions are NOT part of that array. A relevant label
+  that is absent from available_labels belongs in new_labels, even if you have
+  seen it in the examples. When available_labels is empty, existing_labels must
+  be empty. Before returning, check every entry in existing_labels against the
+  supplied array and move any absent label into new_labels.
   Then check whether any important problems in this review are still uncovered.
   If so, create new labels for those problems. If the existing space is empty,
   create all labels needed for this review from scratch.
