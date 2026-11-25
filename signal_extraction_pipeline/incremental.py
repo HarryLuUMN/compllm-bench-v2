@@ -64,7 +64,7 @@ def run_incremental(reviews, output, prompt, configuration, complete, topic_prom
     checkpoint = output / 'state.json'
     settings = {'prompt': prompt, 'configuration': configuration, 'format': 2}
     if topic_prompts is not None:
-        settings.update(format=7 if 'match' in topic_prompts else (5 if 'select' in topic_prompts else 4), topic_prompts=topic_prompts)
+        settings.update(format=(8 if prompt.get('new_labels_only') else 7) if 'match' in topic_prompts else (5 if 'select' in topic_prompts else 4), topic_prompts=topic_prompts)
     fingerprint = cache_key(settings)
     state = json.loads(checkpoint.read_text()) if checkpoint.exists() else {
         'fingerprint': fingerprint, 'configuration': configuration, 'label_space': [], 'reviews': []}
@@ -93,6 +93,10 @@ def run_incremental(reviews, output, prompt, configuration, complete, topic_prom
                 request = tree_messages(topic_prompts['context'], prompt, {},
                                         {'review': review, 'matched_labels': matched})
                 def validate_generation(answer):
+                    if prompt.get('new_labels_only'):
+                        if not isinstance(answer, dict) or set(answer) != {'new_labels'}:
+                            raise ValueError('Expected only a new_labels array')
+                        return validate_labels({'existing_labels': matched, 'new_labels': answer['new_labels']}, state['label_space'])
                     existing, new = validate_labels(answer, state['label_space'])
                     supplied = validate_labels({'existing_labels': answer['existing_labels'], 'new_labels': []}, state['label_space'])
                     if supplied[1] or set(supplied[0]) != set(matched):

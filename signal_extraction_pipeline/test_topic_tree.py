@@ -251,7 +251,7 @@ class TopicTreeTests(unittest.TestCase):
                     '--output', str(root / 'out'), '--env', str(root / 'absent')]
             responses = [{'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(value)}}],
                           'usage': {'total_tokens': 10, 'prompt_cache_hit_tokens': 7}} for value in
-                         [labels(new=['data leakage']), placement(groups=[('data integrity', ['data leakage'])])]]
+                         [{'new_labels': ['data leakage']}, placement(groups=[('data integrity', ['data leakage'])])]]
             with patch.dict(os.environ, {'DEEPSEEK_API_KEY': 'offline-only'}), \
                     patch.object(sys, 'argv', argv), patch.object(cli, 'post', side_effect=responses) as api:
                 cli.main()

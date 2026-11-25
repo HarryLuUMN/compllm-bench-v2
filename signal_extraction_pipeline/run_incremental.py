@@ -40,7 +40,7 @@ def main():
     if type(workers) is not int or not 1 <= workers <= 8:
         raise ValueError('label_match_workers must be between 1 and 8')
     prompt_path = args.prompt or ROOT / 'prompts' / (
-        'tree_review_labels.yaml' if args.topic_tree else 'incremental_review_labels.yaml')
+        'generate_missing_labels.yaml' if args.topic_tree else 'incremental_review_labels.yaml')
     prompt = load_prompt(prompt_path)
     topic_prompts = {'context': load_prompt(args.tree_context_prompt),
                      'match': load_prompt(ROOT / 'prompts/match_review_labels.yaml'),

@@ -133,6 +133,27 @@ class LabelMatchingTests(unittest.TestCase):
         self.assertEqual(seen, [label for group in tree.values() for label in group])
         self.assertEqual(matched, [])
 
+    def test_missing_label_generation_never_echoes_matched_labels(self):
+        from signal_extraction_pipeline.topic_tree import validate_tree
+        prompt = load_prompt(ROOT / 'prompts/generate_missing_labels.yaml')
+        labels = [f'existing problem {i}' for i in range(1000)]
+        first = {'review_id': 'seed', 'text': 'seed'}
+        with tempfile.TemporaryDirectory() as directory:
+            empty = iter([{'new_labels': []}])
+            state = run_incremental([first], directory, prompt, {'max_input_bytes': 300000},
+                                    lambda _: json.dumps(next(empty)), PROMPTS)
+            state['label_space'] = labels
+            state['topic_label_tree'] = {'statistics': labels}
+            Path(directory, 'state.json').write_text(json.dumps(state))
+            answers = iter([{'selected_topic_ids': [0]}, {'selected_label_ids': list(range(1000))},
+                            {'new_labels': []}])
+            result = run_incremental([first, REVIEW], directory, prompt, {'max_input_bytes': 300000},
+                                     lambda _: json.dumps(next(answers)), PROMPTS)
+            self.assertEqual(result['reviews'][-1]['labels'], labels)
+            self.assertEqual(result['reviews'][-1]['new_labels'], [])
+            self.assertEqual(result['reviews'][0], state['reviews'][0])
+            validate_tree(result['topic_label_tree'], result['label_space'])
+
     def test_ids_are_batch_local_typed_and_duplicate_safe(self):
         for invalid in [True, -1, 1, '0']:
             with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as directory:

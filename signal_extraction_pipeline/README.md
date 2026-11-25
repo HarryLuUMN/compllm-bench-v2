@@ -302,3 +302,10 @@ batch numbers its candidates locally; the validator requires integer IDs in rang
 them to canonical label names before caching and saving. This prevents renamed
 labels from being accepted as existing candidates. Historical successful review
 records remain unchanged during an explicitly backed-up format migration.
+
+Format 8 uses generate_missing_labels.yaml: the final generation call returns
+only new_labels. Matched labels remain in the input for coverage checking and are
+retained by code, rather than requiring the model to echo a potentially large
+list into a bounded output. This preserves every validated match without output
+truncation from copying it. A backed-up migration may reuse unchanged validated
+topic/matching caches, but must invalidate generation/placement caches.
