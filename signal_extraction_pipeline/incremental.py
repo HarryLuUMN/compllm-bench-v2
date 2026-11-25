@@ -64,7 +64,7 @@ def run_incremental(reviews, output, prompt, configuration, complete, topic_prom
     checkpoint = output / 'state.json'
     settings = {'prompt': prompt, 'configuration': configuration, 'format': 2}
     if topic_prompts is not None:
-        settings.update(format=6 if 'match' in topic_prompts else (5 if 'select' in topic_prompts else 4), topic_prompts=topic_prompts)
+        settings.update(format=7 if 'match' in topic_prompts else (5 if 'select' in topic_prompts else 4), topic_prompts=topic_prompts)
     fingerprint = cache_key(settings)
     state = json.loads(checkpoint.read_text()) if checkpoint.exists() else {
         'fingerprint': fingerprint, 'configuration': configuration, 'label_space': [], 'reviews': []}

@@ -295,3 +295,10 @@ a paused historical run, back up its checkpoint and source snapshot, explicitly
 migrate its fingerprint and record the completed-prefix hash/method transition.
 Do not clear the output, change existing review records or restart from zero.
 This code update does not migrate, submit or resume the paused Quest experiment.
+
+Format 7 matching returns `selected_label_ids`, never copied label strings. Each
+batch numbers its candidates locally; the validator requires integer IDs in range
+(booleans and strings are rejected), deduplicates valid selections and resolves
+them to canonical label names before caching and saving. This prevents renamed
+labels from being accepted as existing candidates. Historical successful review
+records remain unchanged during an explicitly backed-up format migration.

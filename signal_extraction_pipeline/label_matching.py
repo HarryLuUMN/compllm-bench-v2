@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from signal_extraction_pipeline.core import cache_key, write_json
-from signal_extraction_pipeline.topic_tree import canonical, complete_topic_stage, tree_messages
+from signal_extraction_pipeline.topic_tree import complete_topic_stage, tree_messages
 
 
 class ReviewStages:
@@ -33,8 +33,8 @@ def match_labels(review, tree, prompts, configuration, complete, stages):
 
     def request_for(group):
         context = {}
-        for topic, label in group:
-            context.setdefault(topic, []).append(label)
+        for index, (topic, label) in enumerate(group):
+            context.setdefault(topic, []).append({'id': index, 'label': label})
         return tree_messages(prompts['context'], prompts['match'], context, {'review': review})
 
     batches = []
@@ -54,9 +54,12 @@ def match_labels(review, tree, prompts, configuration, complete, stages):
         request = request_for(group)
         names = [label for _, label in group]
         def validate(answer):
-            if not isinstance(answer, dict) or set(answer) != {'existing_labels'} or not isinstance(answer['existing_labels'], list):
-                raise ValueError('Expected existing_labels array')
-            return list(dict.fromkeys(canonical(label, names, 'candidate label') for label in answer['existing_labels']))
+            if not isinstance(answer, dict) or set(answer) != {'selected_label_ids'} or not isinstance(answer['selected_label_ids'], list):
+                raise ValueError('Expected selected_label_ids array')
+            ids = answer['selected_label_ids']
+            if any(type(index) is not int or not 0 <= index < len(names) for index in ids):
+                raise ValueError('Unknown candidate label ID')
+            return [names[index] for index in dict.fromkeys(ids)]
         return stages.run('match', request, lambda: complete_topic_stage(
             request, validate, prompts['match'], configuration, complete))
 

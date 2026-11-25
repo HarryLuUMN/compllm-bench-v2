@@ -27,7 +27,7 @@ class LabelMatchingTests(unittest.TestCase):
         calls = []
         def complete(request):
             calls.append(request)
-            return json.dumps({'existing_labels': ['invented' if len(calls) == 1 else 'low power']})
+            return json.dumps({'selected_label_ids': [999 if len(calls) == 1 else 0]})
         with tempfile.TemporaryDirectory() as directory:
             result, count = match_labels(REVIEW, {'statistics': ['low power']}, PROMPTS,
                                          {'max_input_bytes': 20000, 'correction_reserve_bytes': 2000},
@@ -44,8 +44,8 @@ class LabelMatchingTests(unittest.TestCase):
             self.assertLessEqual(request_size(request), 4000)
             self.assertIn(REVIEW['text'], request[-1]['content'])
             supplied = context(request)['statistics']
-            seen.extend(supplied)
-            return json.dumps({'existing_labels': supplied[:1]})
+            seen.extend(item['label'] for item in supplied)
+            return json.dumps({'selected_label_ids': [supplied[0]['id']]})
         with tempfile.TemporaryDirectory() as directory:
             result, count = match_labels(REVIEW, {'statistics': labels}, PROMPTS, config, complete, ReviewStages(directory))
         self.assertGreater(count, 1)
@@ -61,13 +61,13 @@ class LabelMatchingTests(unittest.TestCase):
         def complete(request):
             supplied = context(request)['statistics']
             with lock:
-                calls.append(supplied[0])
+                calls.append(supplied[0]['label'])
                 number = len(calls)
             if number <= 2:
                 gate.wait(timeout=3)
-            if supplied[0] == labels[0]:
+            if supplied[0]['label'] == labels[0]:
                 raise RuntimeError('Interrupted batch')
-            return json.dumps({'existing_labels': supplied[:1]})
+            return json.dumps({'selected_label_ids': [supplied[0]['id']]})
         with tempfile.TemporaryDirectory() as directory:
             stages = ReviewStages(directory)
             with self.assertRaisesRegex(RuntimeError, 'Interrupted'):
@@ -76,8 +76,8 @@ class LabelMatchingTests(unittest.TestCase):
             resumed = []
             def finish(request):
                 supplied = context(request)['statistics']
-                resumed.append(supplied[0])
-                return json.dumps({'existing_labels': supplied[:1]})
+                resumed.append(supplied[0]['label'])
+                return json.dumps({'selected_label_ids': [supplied[0]['id']]})
             result, count = match_labels(REVIEW, {'statistics': labels}, PROMPTS, config, finish, stages)
             self.assertEqual(len(resumed), count - successful)
             self.assertEqual(len(result), count)
@@ -99,7 +99,7 @@ class LabelMatchingTests(unittest.TestCase):
                 if 'selected_topic_ids' in request[-1]['content']:
                     return '{"selected_topic_ids":[0]}'
                 if 'matched_labels' not in request[-1]['content']:
-                    return '{"existing_labels":["low power"]}'
+                    return '{"selected_label_ids":[0]}'
                 raise RuntimeError('Interrupted generation')
             with self.assertRaisesRegex(RuntimeError, 'Interrupted generation'):
                 run_incremental(reviews, directory, GENERATE, config, interrupted, PROMPTS)
@@ -123,8 +123,8 @@ class LabelMatchingTests(unittest.TestCase):
         def complete(request):
             self.assertLessEqual(request_size(request), 284000)
             supplied = [label for group in context(request).values() for label in group]
-            seen.extend(supplied)
-            return '{"existing_labels":[]}'
+            seen.extend(item['label'] for item in supplied)
+            return '{"selected_label_ids":[]}'
         with tempfile.TemporaryDirectory() as directory:
             matched, count = match_labels(REVIEW, tree, PROMPTS,
                                           {'max_input_bytes': 300000, 'label_match_workers': 1},
@@ -132,6 +132,19 @@ class LabelMatchingTests(unittest.TestCase):
         self.assertGreater(count, 1)
         self.assertEqual(seen, [label for group in tree.values() for label in group])
         self.assertEqual(matched, [])
+
+    def test_ids_are_batch_local_typed_and_duplicate_safe(self):
+        for invalid in [True, -1, 1, '0']:
+            with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as directory:
+                calls = []
+                def complete(request):
+                    calls.append(request)
+                    return json.dumps({'selected_label_ids': [invalid] if len(calls) == 1 else [0, 0]})
+                result, _ = match_labels(REVIEW, {'statistics': ['exact label']}, PROMPTS,
+                                         {'max_input_bytes': 20000, 'correction_reserve_bytes': 2000},
+                                         complete, ReviewStages(directory))
+                self.assertEqual(result, ['exact label'])
+                self.assertEqual(len(calls), 2)
 
     def test_oversized_review_fails_before_any_call(self):
         with tempfile.TemporaryDirectory() as directory:
