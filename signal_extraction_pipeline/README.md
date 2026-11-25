@@ -262,3 +262,36 @@ placement uses bounded topic IDs, resolved back to canonical names before saving
 Invalid topic-stage JSON or assignments receive validation feedback for at most
 two correction calls. These calls are recorded with usage like other attempts;
 input budgets and single-parent/full-label coverage checks remain enforced.
+
+### Bounded label matching (format 6)
+
+Topic-tree mode first screens all topic names, then matches existing labels under
+selected topics. A fitting candidate set uses one matching call. Oversized sets
+are split into batches, including within one large topic, without dropping any
+candidate or shortening the review. Every batch receives the complete review and
+may select only supplied existing labels. Up to `label_match_workers` batches run
+concurrently (default 4, maximum 8). Only after every batch succeeds does a single
+generation call inspect the review and union of matched labels to add uncovered
+problems. New-label placement and global exact-name canonicalization are retained.
+
+The existing `max_input_bytes` guard remains a conservative byte budget, not an
+exact tokenizer count. Matching batches reserve `correction_reserve_bytes`
+(default 16000) within it for correction exchanges. Every actual stage/correction
+request is checked again against the hard cap; output stays bounded by max_tokens.
+A review that cannot fit even with one candidate, an oversized topic list, or an
+oversized generation request fails explicitly without truncation or committing
+partial labels. No automatic budget increase or top-k truncation is performed.
+
+Validated selections, matching batches, generation and placement are saved under
+`output/stages/`, keyed by method fingerprint, input review and the starting tree.
+Interruptions reuse completed stages/batches, while raw API attempts and usage
+remain under `output/attempts/`. Matching results are combined in input order even
+when calls finish out of order. Reviews update the global tree sequentially and
+only commit after validation. Prompts live in `prompts/match_review_labels.yaml`
+and `prompts/tree_review_labels.yaml`; compute settings remain in quest_computes.
+
+Format-5 checkpoints deliberately reject the changed fingerprint. Before resuming
+a paused historical run, back up its checkpoint and source snapshot, explicitly
+migrate its fingerprint and record the completed-prefix hash/method transition.
+Do not clear the output, change existing review records or restart from zero.
+This code update does not migrate, submit or resume the paused Quest experiment.

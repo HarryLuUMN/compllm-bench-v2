@@ -33,13 +33,20 @@ def main():
     config = json.loads(args.config.read_text())
     if any(type(config.get(k)) is not int or config[k] < 1 for k in ('max_tokens', 'timeout', 'max_input_bytes')):
         raise ValueError('Token, timeout and input budgets must be positive integers')
+    reserve = config.get('correction_reserve_bytes', 16000)
+    workers = config.get('label_match_workers', 4)
+    if args.topic_tree and (type(reserve) is not int or not 0 <= reserve < config['max_input_bytes']):
+        raise ValueError('Correction reserve must be a nonnegative integer below the input budget')
+    if type(workers) is not int or not 1 <= workers <= 8:
+        raise ValueError('label_match_workers must be between 1 and 8')
     prompt_path = args.prompt or ROOT / 'prompts' / (
         'tree_review_labels.yaml' if args.topic_tree else 'incremental_review_labels.yaml')
     prompt = load_prompt(prompt_path)
     topic_prompts = {'context': load_prompt(args.tree_context_prompt),
+                     'match': load_prompt(ROOT / 'prompts/match_review_labels.yaml'),
                      'select': load_prompt(ROOT / 'prompts/select_review_topics.yaml'),
                      'place': load_prompt(args.place_topics_prompt)} if args.topic_tree else None
-    for template in [prompt, *([topic_prompts['place']] if topic_prompts else [])]:
+    for template in [prompt, *([topic_prompts[key] for key in ('select', 'match', 'place')] if topic_prompts else [])]:
         if '{{input}}' not in template['task']:
             raise ValueError('Stage prompt must contain {{input}}')
     if topic_prompts and '{{tree}}' not in topic_prompts['context']['task']:

@@ -259,7 +259,7 @@ class TopicTreeTests(unittest.TestCase):
                 first, second = [call.args[1]['messages'] for call in api.call_args_list]
                 self.assertEqual(call_tree(first), {})
                 self.assertEqual(call_tree(second), [])
-                self.assertEqual(set(call_payload(first)), {'review'})
+                self.assertEqual(set(call_payload(first)), {'review', 'matched_labels'})
                 self.assertEqual(set(call_payload(second)), {'new_labels'})
                 cli.main()
                 self.assertEqual(api.call_count, 2)

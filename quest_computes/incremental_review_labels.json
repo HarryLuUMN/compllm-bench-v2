@@ -3,5 +3,7 @@
   "model": "deepseek-flash",
   "max_tokens": 4096,
   "timeout": 180,
-  "max_input_bytes": 300000
+  "max_input_bytes": 300000,
+  "correction_reserve_bytes": 16000,
+  "label_match_workers": 4
 }

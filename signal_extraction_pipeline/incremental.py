@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 
 from signal_extraction_pipeline.core import cache_key, messages, write_json
-from signal_extraction_pipeline.topic_tree import extend_tree, select_topics, tree_messages, validate_tree
+from signal_extraction_pipeline.label_matching import ReviewStages, match_labels
+from signal_extraction_pipeline.topic_tree import complete_topic_stage, extend_tree, select_topics, tree_messages, validate_tree
 
 
 def load_reviews(path):
@@ -63,7 +64,7 @@ def run_incremental(reviews, output, prompt, configuration, complete, topic_prom
     checkpoint = output / 'state.json'
     settings = {'prompt': prompt, 'configuration': configuration, 'format': 2}
     if topic_prompts is not None:
-        settings.update(format=5 if 'select' in topic_prompts else 4, topic_prompts=topic_prompts)
+        settings.update(format=6 if 'match' in topic_prompts else (5 if 'select' in topic_prompts else 4), topic_prompts=topic_prompts)
     fingerprint = cache_key(settings)
     state = json.loads(checkpoint.read_text()) if checkpoint.exists() else {
         'fingerprint': fingerprint, 'configuration': configuration, 'label_space': [], 'reviews': []}
@@ -81,32 +82,54 @@ def run_incremental(reviews, output, prompt, configuration, complete, topic_prom
     write_json(checkpoint, state)
     try:
         for review in reviews[len(done):]:
-            if topic_prompts is not None:
-                selected = select_topics(state['topic_label_tree'], review, topic_prompts, configuration, complete) if 'select' in topic_prompts else list(state['topic_label_tree'])
+            stages = None
+            if topic_prompts is not None and 'match' in topic_prompts:
+                stages = ReviewStages(output / 'stages' / cache_key({
+                    'fingerprint': fingerprint, 'review': review, 'tree': state['topic_label_tree']}))
+                selected = stages.run('topics', {}, lambda: select_topics(
+                    state['topic_label_tree'], review, topic_prompts, configuration, complete))
                 visible_tree = {name: state['topic_label_tree'][name] for name in selected}
-                request = tree_messages(topic_prompts['context'], prompt, visible_tree, {'review': review})
+                matched, batch_count = match_labels(review, visible_tree, topic_prompts, configuration, complete, stages)
+                request = tree_messages(topic_prompts['context'], prompt, {},
+                                        {'review': review, 'matched_labels': matched})
+                def validate_generation(answer):
+                    existing, new = validate_labels(answer, state['label_space'])
+                    supplied = validate_labels({'existing_labels': answer['existing_labels'], 'new_labels': []}, state['label_space'])
+                    if supplied[1] or set(supplied[0]) != set(matched):
+                        raise ValueError('existing_labels must retain exactly the matched labels')
+                    return existing, new
+                existing, new = stages.run('generate', request, lambda: complete_topic_stage(
+                    request, validate_generation, prompt, configuration, complete))
+                proposed = {'existing_labels': existing, 'new_labels': new}
             else:
-                data = {'available_labels': state['label_space'], 'review': review}
-                request = messages(prompt, 'input', json.dumps(data, ensure_ascii=False))
-            if len(json.dumps(request, ensure_ascii=False).encode('utf-8')) > configuration['max_input_bytes']:
-                raise ValueError('Review plus full label space exceeds input budget; no text was truncated')
-            response = complete(request)
-            proposed = json.loads(response)
-            existing, new = validate_labels(proposed, state['label_space'])
+                if topic_prompts is not None:
+                    selected = select_topics(state['topic_label_tree'], review, topic_prompts, configuration, complete) if 'select' in topic_prompts else list(state['topic_label_tree'])
+                    visible_tree = {name: state['topic_label_tree'][name] for name in selected}
+                    request = tree_messages(topic_prompts['context'], prompt, visible_tree, {'review': review})
+                else:
+                    data = {'available_labels': state['label_space'], 'review': review}
+                    request = messages(prompt, 'input', json.dumps(data, ensure_ascii=False))
+                if len(json.dumps(request, ensure_ascii=False).encode('utf-8')) > configuration['max_input_bytes']:
+                    raise ValueError('Review plus full label space exceeds input budget; no text was truncated')
+                response = complete(request)
+                proposed = json.loads(response)
+                existing, new = validate_labels(proposed, state['label_space'])
             record = {k: v for k, v in review.items() if k != 'text'}
             record.update(input_sha256=cache_key(review), existing_labels=existing, new_labels=new,
                           labels=existing + new,
                           classification_corrected=(existing != proposed['existing_labels']
                                                     or new != proposed['new_labels']))
             if topic_prompts is not None:
-                tree, assigned, created = extend_tree(state['topic_label_tree'], new, topic_prompts,
-                                                      configuration, complete)
+                placement = lambda: extend_tree(state['topic_label_tree'], new, topic_prompts, configuration, complete)
+                tree, assigned, created = stages.run('place', new, placement) if stages else placement()
                 validate_tree(tree, state['label_space'] + new)
                 record.update(selected_topics=selected, topic_assignments=assigned, new_topics=created,
                               topic_labels={topic: [label for label in record['labels'] if label in group]
                                             for topic, group in tree.items()
                                             if any(label in group for label in record['labels'])})
                 state['topic_label_tree'] = tree
+                if stages:
+                    record['label_match_batches'] = batch_count
             state['reviews'].append(record)
             state['label_space'].extend(new)
             write_json(checkpoint, state)
